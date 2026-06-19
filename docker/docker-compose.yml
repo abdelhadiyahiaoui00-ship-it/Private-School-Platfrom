@@ -1,15 +1,15 @@
 services:
   postgres:
     image: postgres:16
-    container_name: postgres_db
+    container_name: psp_postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: postgres1
-      POSTGRES_PASSWORD: password1
-      POSTGRES_DB: PSP_DB
+      POSTGRES_USER: psp_user
+      POSTGRES_PASSWORD: psp_password
+      POSTGRES_DB: private_school_db
     networks:
       - backend
     restart: always
