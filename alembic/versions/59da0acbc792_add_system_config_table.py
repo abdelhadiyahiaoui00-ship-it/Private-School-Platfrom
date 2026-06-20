@@ -35,7 +35,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
-    op.execute("INSERT INTO system_config (id, default_language, school_name) VALUES (1, 'ar', 'Académie Al-Nour')")
+    # Note: No seed row — GET /api/config returns FALLBACK_CONFIG when table is empty.
 
 
 def downgrade() -> None:
