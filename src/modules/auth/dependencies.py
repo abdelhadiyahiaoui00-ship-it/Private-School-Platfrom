@@ -58,10 +58,10 @@ def require_role(roles: list[str]):
             from src.core.exceptions import PermissionDenied
             raise PermissionDenied(message=f"Requires one of roles: {', '.join(roles)}")
         return user
-    return Depends(role_checker)
+    return role_checker
 
 
-def require_manage_users(user: CurrentUser = Depends(require_role(["owner", "superAdmin", "admin"]))) -> User:
+def require_manage_users(user: User = Depends(require_role(["owner", "superAdmin", "admin"]))) -> User:
     """Owner & superAdmin always pass. Admin needs manage_users flag."""
     if user.role in ("owner", "superAdmin"):
         return user
