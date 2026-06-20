@@ -25,9 +25,6 @@ class ActivityLogResponse(BaseModel):
     ip_address: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 @router.get("/my", summary="Get current user's own activity log")
 async def get_my_logs(
