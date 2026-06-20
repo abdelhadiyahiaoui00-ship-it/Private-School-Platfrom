@@ -32,12 +32,22 @@ class UserRepository:
     async def get_by_email(self, email: str) -> Optional[User]:
         result = await self._session.execute(
             select(User).where(func.lower(User.email) == email.lower())
+            .options(
+                selectinload(User.branch_links).selectinload(UserBranch.branch),
+                selectinload(User.linked_students),
+                selectinload(User.linked_parents),
+            )
         )
         return result.scalar_one_or_none()
 
     async def get_by_phone(self, phone: str) -> Optional[User]:
         result = await self._session.execute(
             select(User).where(User.phone == phone)
+            .options(
+                selectinload(User.branch_links).selectinload(UserBranch.branch),
+                selectinload(User.linked_students),
+                selectinload(User.linked_parents),
+            )
         )
         return result.scalar_one_or_none()
 
@@ -49,6 +59,11 @@ class UserRepository:
                     func.lower(User.email) == identifier.lower(),
                     User.phone == identifier,
                 )
+            )
+            .options(
+                selectinload(User.branch_links).selectinload(UserBranch.branch),
+                selectinload(User.linked_students),
+                selectinload(User.linked_parents),
             )
         )
         return result.scalar_one_or_none()

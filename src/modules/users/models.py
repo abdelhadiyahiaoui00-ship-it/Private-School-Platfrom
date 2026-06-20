@@ -20,6 +20,7 @@ from sqlalchemy.orm import relationship as orm_relationship
 
 from src.core.database import Base
 from src.common.base_model import BaseModel
+from src.modules.branches.models import Branch  # Ensure Branch is in the registry
 
 
 class User(BaseModel):
@@ -110,6 +111,14 @@ class User(BaseModel):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def assigned_branches(self) -> list["Branch"]:
+        return [ub.branch for ub in self.branch_links if ub.branch]
+
+    @property
+    def children_count(self) -> int:
+        return len(self.linked_students)
 
 
 class UserBranch(Base):
