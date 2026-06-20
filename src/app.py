@@ -9,6 +9,9 @@ from fastapi.openapi.utils import get_openapi
 from src.core.config import settings
 from src.core.database import sessionmanager
 from src.core.exceptions import AppException
+from src.modules.auth.router import router as auth_router
+from src.modules.users.router import router as users_router
+from src.modules.users.router import parent_links_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
@@ -89,7 +92,9 @@ def create_app() -> FastAPI:
     )
 
     # Register your routers here
-    # app.include_router(users_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1")
+    app.include_router(parent_links_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health_check():

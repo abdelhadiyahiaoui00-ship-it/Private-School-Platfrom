@@ -23,23 +23,35 @@ class AppException(Exception):
 
 class ResourceNotFound(AppException):
     status_code = 404
-    code = "RESOURCE_NOT_FOUND"
+    code = "NOT_FOUND"
     message = "Resource not found."
 
 
 class PermissionDenied(AppException):
     status_code = 403
-    code = "PERMISSION_DENIED"
+    code = "FORBIDDEN"
     message = "You do not have permission to perform this action."
 
 
-class InvalidStateTransition(AppException):
-    status_code = 400
-    code = "INVALID_STATE_TRANSITION"
-    message = "This state transition is not allowed."
-
-
-class HistoricalUserCannotWrite(AppException):
+class ForbiddenBranch(AppException):
     status_code = 403
-    code = "HISTORICAL_USER"
-    message = "Historical users cannot perform write operations."
+    code = "FORBIDDEN_BRANCH"
+    message = "You do not have access to this branch."
+
+
+class Unauthorized(AppException):
+    status_code = 401
+    code = "UNAUTHORIZED"
+    message = "Authentication required."
+
+
+class ValidationError(AppException):
+    status_code = 400
+    code = "VALIDATION_ERROR"
+    message = "Validation failed."
+
+
+class Conflict(AppException):
+    status_code = 409
+    code = "CONFLICT"
+    message = "A conflict occurred."

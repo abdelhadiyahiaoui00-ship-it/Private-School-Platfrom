@@ -1,19 +1,14 @@
-from typing import Optional
-
-from pydantic import BaseModel, ConfigDict
-
-from src.common.response import to_camel
+import math
 
 
-class PaginationMeta(BaseModel):
-    page: int
-    page_size: int
-    total: int
-    total_pages: int
-    has_next_page: bool
-    has_prev_page: bool
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        alias_generator=to_camel,
-    )
+def build_pagination(page: int, page_size: int, total: int) -> dict:
+    """Build pagination metadata dict."""
+    total_pages = math.ceil(total / page_size) if total else 0
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_next_page": page < total_pages,
+        "has_prev_page": page > 1,
+    }

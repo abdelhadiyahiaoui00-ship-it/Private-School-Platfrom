@@ -7,8 +7,11 @@ from src.core.config import settings
 from src.core.database import Base
 
 # Import your domain models here
-# from src.modules.users.models import User
-
+from src.modules.users.models import User, UserBranch, ParentStudentLink
+from src.modules.branches.models import Branch
+from src.modules.auth.models import SessionAuth, PasswordResetToken
+from src.modules.audit.models import ActivityLog
+from src.modules.notifications.models import Notification
 
 config = context.config
 
