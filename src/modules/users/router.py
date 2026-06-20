@@ -102,6 +102,17 @@ async def bulk_action(
     return {"data": BulkActionResponse(**result).model_dump(by_alias=True)}
 
 
+# ─── Get me alias ─────────────────────────────────────────────────────────────
+
+@router.get("/me", summary="Get current user (alias)")
+async def get_me_alias(
+    actor: CurrentUser,
+):
+    from src.modules.users.schemas import UserResponse
+    user_out = UserResponse.model_validate(actor).model_dump(by_alias=True)
+    return {"data": user_out}
+
+
 # ─── Get single ───────────────────────────────────────────────────────────────
 
 @router.get("/{user_id}", summary="Get user by ID")

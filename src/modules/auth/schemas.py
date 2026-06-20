@@ -4,7 +4,7 @@ from pydantic.alias_generators import to_camel
 from src.modules.users.schemas import UserResponse
 
 
-class LoginRequest(BaseModel):
+class SignInRequest(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     identifier: str  # email or phone
     password: str
@@ -16,10 +16,10 @@ class AuthTokens(BaseModel):
     refresh_token: str
 
 
-class LoginResponse(BaseModel):
+class AuthResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-    tokens: AuthTokens
     user: UserResponse
+    must_change_password: bool
 
 
 class RefreshTokenRequest(BaseModel):
