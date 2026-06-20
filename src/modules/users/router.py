@@ -11,6 +11,7 @@ from src.modules.auth.dependencies import (
     require_role,
     require_manage_users,
 )
+from src.modules.users.models import User
 from src.modules.users.dependencies import get_user_service
 from src.modules.users.schemas import (
     BulkActionRequest,
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("", summary="List users (paginated + filtered)")
 async def list_users(
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
     role: str = Query("all"),
     status: str = Query("all"),
@@ -72,7 +73,7 @@ async def list_users(
 async def create_user(
     body: CreateUserRequest,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     result = await service.create_user(
@@ -89,7 +90,7 @@ async def create_user(
 async def bulk_action(
     body: BulkActionRequest,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     result = await service.bulk_action(
@@ -106,7 +107,7 @@ async def bulk_action(
 @router.get("/{user_id}", summary="Get user by ID")
 async def get_user(
     user_id: int,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     user = await service.get_user(user_id, actor)
@@ -120,7 +121,7 @@ async def update_user(
     user_id: int,
     body: UpdateUserRequest,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     result = await service.update_user(
@@ -139,7 +140,7 @@ async def set_status(
     user_id: int,
     body: SetStatusRequest,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     result = await service.set_status(
@@ -157,7 +158,7 @@ async def set_status(
 async def reset_password(
     user_id: int,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     temp_password = await service.reset_password(
@@ -174,7 +175,7 @@ async def reset_password(
 async def delete_user(
     user_id: int,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     await service.delete_user(
@@ -206,7 +207,7 @@ parent_links_router = APIRouter(prefix="/parent-links", tags=["Parent Links"])
 async def create_parent_link(
     body: CreateParentLinkRequest,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     link = await service.create_parent_link(
@@ -223,7 +224,7 @@ async def create_parent_link(
 async def delete_parent_link(
     link_id: int,
     request: Request,
-    actor: CurrentUser = Depends(require_manage_users),
+    actor: User = Depends(require_manage_users),
     service: UserService = Depends(get_user_service),
 ):
     await service.delete_parent_link(
