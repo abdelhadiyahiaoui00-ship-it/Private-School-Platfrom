@@ -28,7 +28,7 @@ async def get_current_user(
         # Wrap underlying jwt errors into our app exceptions
         if type(e).__name__ == "TokenExpired":
             raise TokenExpired()
-        raise TokenInvalid()
+        raise TokenInvalid(message=f"Invalid token. Debug: {type(e).__name__} - {str(e)}")
 
     user_id_str = payload.get("sub")
     if not user_id_str:
