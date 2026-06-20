@@ -12,6 +12,7 @@ from src.modules.branches.models import Branch
 from src.modules.auth.models import SessionAuth, PasswordResetToken
 from src.modules.audit.models import ActivityLog
 from src.modules.notifications.models import Notification
+from src.modules.config.models import SystemConfig
 
 config = context.config
 

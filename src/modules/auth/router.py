@@ -131,7 +131,7 @@ async def forgot_password(
     service: AuthService = Depends(get_auth_service),
 ):
     ip = request.client.host if request.client else None
-    await service.forgot_password(body.email, ip)
+    await service.forgot_password(body.identifier, ip)
     return {"data": {"sent": True}}
 
 

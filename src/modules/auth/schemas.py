@@ -35,7 +35,7 @@ class ChangePasswordRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-    email: str
+    identifier: str  # email OR phone
 
 
 class ResetPasswordRequest(BaseModel):

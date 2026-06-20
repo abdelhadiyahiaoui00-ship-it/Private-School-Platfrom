@@ -157,8 +157,8 @@ class AuthService:
             ip_address=ip,
         )
 
-    async def forgot_password(self, email: str, ip: Optional[str] = None) -> None:
-        user = await self._user_repo.get_by_email(email)
+    async def forgot_password(self, identifier: str, ip: Optional[str] = None) -> None:
+        user = await self._user_repo.get_by_identifier(identifier)
         if not user or user.status != "active":
             return  # Silently ignore to prevent email enumeration
 

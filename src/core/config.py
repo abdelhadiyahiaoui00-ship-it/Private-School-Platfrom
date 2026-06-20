@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # ─── Email (via Vercel relay) ─────────────────────────────────────────────
     VERCEL_EMAIL_URL: str = ""
     EMAIL_API_SECRET: str = ""
+    MAIL_FROM: str = "onboarding@resend.dev"
 
     # ─── Seed defaults ───────────────────────────────────────────────────────
     OWNER_EMAIL: str = "owner@school.dz"
