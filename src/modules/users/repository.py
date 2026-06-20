@@ -105,10 +105,23 @@ class UserRepository:
             selectinload(User.linked_parents),
         )
 
-        # Branch scope for admin (can only see users in their branches)
-        if branch_ids_scope is not None:
+        # Determine branch filters — consolidate into a single JOIN
+        branch_filter_ids: Optional[list[int]] = None
+        if branch_ids_scope is not None and branch_id:
+            # Admin scoped AND specific branch filter — intersection
+            if branch_id in branch_ids_scope:
+                branch_filter_ids = [branch_id]
+            else:
+                # Admin doesn't have access to this branch — return empty
+                branch_filter_ids = [-1]  # impossible ID, returns nothing
+        elif branch_ids_scope is not None:
+            branch_filter_ids = branch_ids_scope
+        elif branch_id:
+            branch_filter_ids = [branch_id]
+
+        if branch_filter_ids is not None:
             q = q.join(UserBranch, UserBranch.user_id == User.id).where(
-                UserBranch.branch_id.in_(branch_ids_scope)
+                UserBranch.branch_id.in_(branch_filter_ids)
             ).distinct()
 
         # Filters
@@ -116,10 +129,6 @@ class UserRepository:
             q = q.where(User.role == role)
         if status and status != "all":
             q = q.where(User.status == status)
-        if branch_id:
-            q = q.join(UserBranch, UserBranch.user_id == User.id).where(
-                UserBranch.branch_id == branch_id
-            ).distinct()
         if search:
             term = f"%{search}%"
             q = q.where(
@@ -159,14 +168,20 @@ class UserRepository:
     async def get_stats(self, branch_ids_scope: Optional[list[int]] = None) -> dict:
         roles = ["owner", "superAdmin", "admin", "teacher", "student", "parent"]
 
-        q_base = select(User.role, User.status, func.count(User.id)).group_by(
-            User.role, User.status
-        )
         if branch_ids_scope is not None:
-            q_base = (
-                q_base.join(UserBranch, UserBranch.user_id == User.id)
+            # Use subquery to get distinct user IDs in scope first
+            scoped_user_ids = (
+                select(UserBranch.user_id)
                 .where(UserBranch.branch_id.in_(branch_ids_scope))
                 .distinct()
+                .scalar_subquery()
+            )
+            q_base = select(User.role, User.status, func.count(User.id)).where(
+                User.id.in_(scoped_user_ids)
+            ).group_by(User.role, User.status)
+        else:
+            q_base = select(User.role, User.status, func.count(User.id)).group_by(
+                User.role, User.status
             )
 
         result = await self._session.execute(q_base)

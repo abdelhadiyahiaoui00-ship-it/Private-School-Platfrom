@@ -14,6 +14,8 @@ from src.modules.users.router import router as users_router
 from src.modules.users.router import parent_links_router
 from src.modules.config.router import router as config_router
 from src.modules.branches.router import router as branches_router
+from src.modules.notifications.router import router as notifications_router
+from src.modules.audit.router import router as logs_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
@@ -99,6 +101,8 @@ def create_app() -> FastAPI:
     app.include_router(parent_links_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
     app.include_router(branches_router, prefix="/api")
+    app.include_router(notifications_router, prefix="/api")
+    app.include_router(logs_router, prefix="/api")
 
     @app.api_route("/health", methods=["GET", "HEAD"])
     async def health_check():

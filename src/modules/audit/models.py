@@ -19,6 +19,9 @@ class ActivityLog(Base):
     
     entity_type: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    branch_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)

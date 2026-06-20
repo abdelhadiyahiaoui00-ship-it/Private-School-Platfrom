@@ -16,6 +16,7 @@ async def log_action(
     category: str,
     entity_type: Optional[str] = None,
     entity_id: Optional[int] = None,
+    branch_id: Optional[int] = None,
     metadata: Optional[dict] = None,
     ip_address: Optional[str] = None,
 ) -> None:
@@ -30,6 +31,7 @@ async def log_action(
             category=category,
             entity_type=entity_type,
             entity_id=entity_id,
+            branch_id=branch_id,
             metadata_=metadata,
             ip_address=ip_address,
         )
