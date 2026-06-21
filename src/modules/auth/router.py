@@ -47,7 +47,8 @@ async def sign_in(
     
     must_change = result["user"].must_change_password
     
-    return {"data": {"user": user_out, "mustChangePassword": must_change}}
+    # TODO: REMOVE BEFORE PRODUCTION — access_token exposed for testing only
+    return {"data": {"user": user_out, "mustChangePassword": must_change, "accessToken": result["tokens"]["access_token"]}}
 
 
 @router.post("/refresh", summary="Refresh access token")
