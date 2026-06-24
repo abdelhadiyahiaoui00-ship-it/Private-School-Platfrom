@@ -136,6 +136,7 @@ class UpdateUserRequest(BaseModel):
     date_of_birth: Optional[date] = None
     avatar_url: Optional[str] = None
     notifications_enabled: Optional[bool] = None
+    password: Optional[str] = None
     # Admin-only fields (ignored if caller lacks permission):
     role: Optional[str] = None
     status: Optional[str] = None

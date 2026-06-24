@@ -81,7 +81,7 @@ async def create_user(
         actor,
         ip=request.client.host if request.client else None,
     )
-    return {"data": result.model_dump(by_alias=True)}
+    return {"data": result}
 
 
 # ─── Bulk ─────────────────────────────────────────────────────────────────────

@@ -302,15 +302,15 @@ class UserService:
         user = await self._repo.get_by_id(new_user.id)
         response = _build_user_response(user)
 
-        # Attach temporary password (one-time)
-        return UserWithPasswordResponse(
-            **response.model_dump(),
-            deactivated_at=None,
-            deactivated_by=None,
-            children=[],
-            parents=[],
-            temporary_password=temp_password,
-        )
+        # Build response dict directly to avoid Pydantic model chaining issues
+        response_dict = response.model_dump(by_alias=True)
+        response_dict["deactivatedAt"] = None
+        response_dict["deactivatedBy"] = None
+        response_dict["children"] = []
+        response_dict["parents"] = []
+        response_dict["temporaryPassword"] = temp_password
+
+        return response_dict
 
     # ─── Update ───────────────────────────────────────────────────────────────
 
@@ -343,6 +343,12 @@ class UserService:
             if field in data and data[field] is not None:
                 setattr(user, field, data[field])
                 changed.append(field)
+
+        # Password update: admin sends plain text → backend hashes it
+        if data.get("password"):
+            user.password_hash = hash_password(data["password"])
+            user.must_change_password = True
+            changed.append("password")
 
         # Admin-only fields — only actor with elevated role can set these
         if actor.role in ("owner", "superAdmin") or (
