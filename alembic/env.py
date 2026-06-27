@@ -13,6 +13,7 @@ from src.modules.auth.models import SessionAuth, PasswordResetToken
 from src.modules.audit.models import ActivityLog
 from src.modules.notifications.models import Notification
 from src.modules.config.models import SystemConfig
+from src.modules.landing.models import LandingPageContent
 
 config = context.config
 

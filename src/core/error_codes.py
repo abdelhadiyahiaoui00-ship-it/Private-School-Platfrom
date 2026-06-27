@@ -28,5 +28,17 @@ class ErrorCode(str, Enum):
     # ─── Rate Limiting ───────────────────────────────────────────────────────
     RATE_LIMITED = "RATE_LIMITED"
 
+    # ─── Branches ────────────────────────────────────────────────────────────
+    BRANCH_NAME_TAKEN = "BRANCH_NAME_TAKEN"
+    BRANCH_HAS_ACTIVE_DEPENDENCIES = "BRANCH_HAS_ACTIVE_DEPENDENCIES"
+    TOO_MANY_PHOTOS = "TOO_MANY_PHOTOS"
+    INVALID_MAP_URL = "INVALID_MAP_URL"
+
+    # ─── Config ──────────────────────────────────────────────────────────────
+    CONFIG_NOT_FOUND = "CONFIG_NOT_FOUND"
+
+    # ─── Landing ─────────────────────────────────────────────────────────────
+    LANDING_ABOUT_SINGLE_ITEM = "LANDING_ABOUT_SINGLE_ITEM"
+
     # ─── Server ──────────────────────────────────────────────────────────────
     INTERNAL_ERROR = "INTERNAL_ERROR"

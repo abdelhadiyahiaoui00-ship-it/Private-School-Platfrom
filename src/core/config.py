@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # ─── Seed defaults ───────────────────────────────────────────────────────
     OWNER_EMAIL: str = "owner@school.dz"
-    OWNER_PASSWORD: str = "Owner@School2026!"
+    OWNER_PASSWORD: str = "r"
     OWNER_FIRST_NAME: str = "Owner"
     OWNER_LAST_NAME: str = "Account"
 
