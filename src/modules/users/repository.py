@@ -105,7 +105,7 @@ class UserRepository:
             selectinload(User.linked_parents),
         )
 
-        # Determine branch filters — consolidate into a single JOIN
+        # Determine branch filters
         branch_filter_ids: Optional[list[int]] = None
         if branch_ids_scope is not None and branch_id:
             # Admin scoped AND specific branch filter — intersection
@@ -120,9 +120,14 @@ class UserRepository:
             branch_filter_ids = [branch_id]
 
         if branch_filter_ids is not None:
-            q = q.join(UserBranch, UserBranch.user_id == User.id).where(
-                UserBranch.branch_id.in_(branch_filter_ids)
-            ).distinct()
+            # Use an IN subquery instead of JOIN + DISTINCT to avoid PostgreSQL JSON distinct errors
+            q = q.where(
+                User.id.in_(
+                    select(UserBranch.user_id).where(
+                        UserBranch.branch_id.in_(branch_filter_ids)
+                    )
+                )
+            )
 
         # Filters
         if role and role != "all":

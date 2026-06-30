@@ -67,4 +67,5 @@ class UpdateBranchRequest(BaseModel):
 
 
 class SetBranchStatusRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     is_active: bool
