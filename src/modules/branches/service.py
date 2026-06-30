@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.common.pagination import build_pagination
 from src.modules.audit.service import log_action
 from src.modules.branches.exceptions import (
-    BranchHasActiveDependencies,
     BranchNameTaken,
     BranchNotFound,
     InvalidMapUrl,
