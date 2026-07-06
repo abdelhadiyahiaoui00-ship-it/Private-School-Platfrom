@@ -5,6 +5,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from src.core.config import settings
 from src.core.database import sessionmanager
@@ -17,9 +21,13 @@ from src.modules.branches.router import router as branches_router
 from src.modules.notifications.router import router as notifications_router
 from src.modules.audit.router import router as logs_router
 from src.modules.landing.router import router as landing_router
+from src.modules.public.router import router as public_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
+
+# Global limiter instance — routers reference their own but app needs state
+_limiter = Limiter(key_func=get_remote_address)
 
 async def run_migrations() -> None:
     """Run Alembic migrations in a thread so we don't block the event loop."""
@@ -96,6 +104,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Rate limiting — must come after CORS
+    app.state.limiter = _limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
     # Register your routers here
     app.include_router(auth_router, prefix="/api")
     app.include_router(users_router, prefix="/api")
@@ -105,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")
     app.include_router(landing_router, prefix="/api")
+    app.include_router(public_router, prefix="/api")
 
     @app.api_route("/health", methods=["GET", "HEAD"])
     async def health_check():

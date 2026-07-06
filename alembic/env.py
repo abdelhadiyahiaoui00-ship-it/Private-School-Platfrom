@@ -14,6 +14,11 @@ from src.modules.audit.models import ActivityLog
 from src.modules.notifications.models import Notification
 from src.modules.config.models import SystemConfig
 from src.modules.landing.models import LandingPageContent
+from src.modules.modules.models import Module
+from src.modules.classes.models import Class
+from src.modules.groups.models import Group
+from src.modules.sessions.models import Session
+from src.modules.enrollments.models import Enrollment
 
 config = context.config
 

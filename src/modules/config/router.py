@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 
 from src.core.database import DBSessionDep
@@ -9,6 +11,7 @@ from src.modules.config.service import ConfigService
 from src.modules.users.models import User
 
 router = APIRouter(prefix="/config", tags=["Config"])
+limiter = Limiter(key_func=get_remote_address)
 
 FALLBACK_CONFIG = {
     "id": 1,
@@ -38,7 +41,8 @@ def get_config_service(session: DBSessionDep) -> ConfigService:
 
 
 @router.get("", summary="Get system config (public)")
-async def get_config(session: DBSessionDep):
+@limiter.limit("30/minute")
+async def get_config(request: Request, session: DBSessionDep):
     """Public endpoint — no auth required."""
     result = await session.execute(select(SystemConfig).limit(1))
     config = result.scalar_one_or_none()
