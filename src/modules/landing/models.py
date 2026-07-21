@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.database import Base
 
@@ -20,6 +21,7 @@ class LandingPageContent(Base):
     # 'new' | 'on_sale' | 'popular'
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    positions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

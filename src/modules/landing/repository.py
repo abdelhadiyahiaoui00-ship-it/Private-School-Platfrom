@@ -45,6 +45,7 @@ class LandingRepository:
                 badge=item.get("badge"),
                 display_order=item.get("display_order", 0),
                 is_active=item.get("is_active", True),
+                positions=item.get("positions"),
                 created_at=now,
                 updated_at=now,
             )

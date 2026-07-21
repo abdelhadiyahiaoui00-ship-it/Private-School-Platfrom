@@ -1,10 +1,30 @@
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Literal, Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
 
 VALID_SECTIONS = {"hero_slide", "offer", "about"}
 VALID_BADGES = {"new", "on_sale", "popular"}
+
+
+class ElementPosition(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    vertical: Literal["top", "center", "bottom"]
+    vertical_offset: int
+    horizontal: Literal["left", "center", "right"]
+    horizontal_offset: int
+
+    @field_validator("vertical_offset", "horizontal_offset")
+    @classmethod
+    def clamp_offset(cls, v: int) -> int:
+        return max(0, min(100, v))
+
+
+class HeroSlidePositions(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    title: ElementPosition
+    description: ElementPosition
+    cta: ElementPosition
 
 
 class LandingContentResponse(BaseModel):
@@ -21,6 +41,7 @@ class LandingContentResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    positions: Optional[HeroSlidePositions] = None
 
 
 class UpsertLandingItemDTO(BaseModel):
@@ -34,6 +55,7 @@ class UpsertLandingItemDTO(BaseModel):
     badge: Optional[str] = None
     display_order: int
     is_active: bool
+    positions: Optional[HeroSlidePositions] = None
 
 
 class UpsertLandingSectionRequest(BaseModel):

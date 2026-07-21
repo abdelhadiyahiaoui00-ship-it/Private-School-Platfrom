@@ -45,6 +45,9 @@ class LandingService:
 
         # Validate section-specific required fields
         for item in items_data:
+            if section != "hero_slide":
+                item.positions = None
+
             if section == "hero_slide" and not item.image_url:
                 from src.core.exceptions import ValidationError
                 raise ValidationError(message="imageUrl is required for hero_slide items.")
