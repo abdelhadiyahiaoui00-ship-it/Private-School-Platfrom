@@ -28,6 +28,7 @@ class SystemConfig(Base):
     monthly_default_duration_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     monthly_expiry_warning_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     session_based_expiry_warning_sessions: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    session_generation_horizon_weeks: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     # Audit
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
     updated_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

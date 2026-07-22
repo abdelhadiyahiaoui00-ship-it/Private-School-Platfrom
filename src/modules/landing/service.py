@@ -59,7 +59,7 @@ class LandingService:
                     from src.core.exceptions import ValidationError
                     raise ValidationError(message="title is required for offer items.")
 
-        raw_items = [item.model_dump(by_alias=False) for item in items_data]
+        raw_items = [item.model_dump(mode="json", by_alias=False) for item in items_data]
         await self._repo.replace_section(section, raw_items)
 
         await log_action(

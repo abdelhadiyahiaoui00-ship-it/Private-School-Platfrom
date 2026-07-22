@@ -38,6 +38,7 @@ class SystemConfigResponse(BaseModel):
     monthly_default_duration_days: int
     monthly_expiry_warning_days: int
     session_based_expiry_warning_sessions: int
+    session_generation_horizon_weeks: int
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
 
@@ -60,3 +61,4 @@ class UpdateConfigRequest(BaseModel):
     monthly_default_duration_days: Optional[int] = None
     monthly_expiry_warning_days: Optional[int] = None
     session_based_expiry_warning_sessions: Optional[int] = None
+    session_generation_horizon_weeks: Optional[int] = None
