@@ -22,6 +22,10 @@ from src.modules.notifications.router import router as notifications_router
 from src.modules.audit.router import router as logs_router
 from src.modules.landing.router import router as landing_router
 from src.modules.public.router import router as public_router
+from src.modules.modules.router import router as modules_router
+from src.modules.classes.router import router as classes_router
+from src.modules.groups.router import router as groups_router
+from src.modules.sessions.router import router as sessions_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
@@ -119,6 +123,10 @@ def create_app() -> FastAPI:
     app.include_router(logs_router, prefix="/api")
     app.include_router(landing_router, prefix="/api")
     app.include_router(public_router, prefix="/api")
+    app.include_router(modules_router, prefix="/api")
+    app.include_router(classes_router, prefix="/api")
+    app.include_router(groups_router, prefix="/api")
+    app.include_router(sessions_router, prefix="/api")
 
     @app.api_route("/health", methods=["GET", "HEAD"])
     async def health_check():
