@@ -20,11 +20,18 @@ class ElementPosition(BaseModel):
         return max(0, min(100, v))
 
 
+class SecondaryCtaConfig(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    visible: bool
+    position: ElementPosition
+
+
 class HeroSlidePositions(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     title: ElementPosition
     description: ElementPosition
     cta: ElementPosition
+    secondary_cta: SecondaryCtaConfig
 
 
 class LandingContentResponse(BaseModel):
