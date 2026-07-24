@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 VALID_SECTIONS = {"hero_slide", "offer", "about"}
@@ -32,6 +32,23 @@ class HeroSlidePositions(BaseModel):
     description: ElementPosition
     cta: ElementPosition
     secondary_cta: SecondaryCtaConfig
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_secondary_cta(cls, data: any) -> any:
+        if isinstance(data, dict):
+            # Support both camelCase (from API request) and snake_case (from DB)
+            if "secondary_cta" not in data and "secondaryCta" not in data:
+                data["secondary_cta"] = {
+                    "visible": False,
+                    "position": {
+                        "vertical": "bottom",
+                        "vertical_offset": 15,
+                        "horizontal": "right",
+                        "horizontal_offset": 20
+                    }
+                }
+        return data
 
 
 class LandingContentResponse(BaseModel):
