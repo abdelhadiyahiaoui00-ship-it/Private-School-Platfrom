@@ -93,9 +93,27 @@ class SessionService:
             branch_ids_scope=branch_ids_scope,
         )
         items = [_build_response(s).model_dump(by_alias=True) for s in sessions]
+        
+        teachers = {}
+        rooms = set()
+        groups = {}
+        for s in sessions:
+            if s.group_ and s.group_.teacher:
+                t = s.group_.teacher
+                teachers[t.id] = f"{t.first_name} {t.last_name}"
+            if s.room:
+                rooms.add(s.room)
+            if s.group_:
+                groups[s.group_.id] = s.group_.name
+
         return {
             "items": items,
             "pagination": build_pagination(params.get("page", 1), params.get("page_size", 20), total),
+            "filters": {
+                "teachers": [{"id": k, "name": v} for k, v in teachers.items()],
+                "rooms": list(rooms),
+                "groups": [{"id": k, "name": v} for k, v in groups.items()],
+            }
         }
 
     async def get_session(self, session_id: int, actor: User) -> dict:
