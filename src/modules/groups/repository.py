@@ -14,11 +14,13 @@ class GroupRepository:
         self._session = session
 
     async def get_by_id(self, group_id: int) -> Optional[Group]:
+        from src.modules.classes.models import Class
         result = await self._session.execute(
             select(Group)
             .where(Group.id == group_id)
             .options(
-                selectinload(Group.class_).selectinload("module"),
+                selectinload(Group.class_).selectinload(Class.module),
+                selectinload(Group.class_).selectinload(Class.branch),
                 selectinload(Group.teacher),
             )
         )
@@ -37,7 +39,8 @@ class GroupRepository:
         from src.modules.classes.models import Class
         
         q = select(Group).join(Group.class_).options(
-            selectinload(Group.class_).selectinload("module"),
+            selectinload(Group.class_).selectinload(Class.module),
+            selectinload(Group.class_).selectinload(Class.branch),
             selectinload(Group.teacher)
         )
 
