@@ -6,14 +6,18 @@ from src.common.pagination import build_pagination
 from src.modules.audit.service import log_action
 from src.modules.classes.repository import ClassRepository
 from src.modules.classes.schemas import TeacherBasic
+from src.common.session_generator import generate_sessions
+from src.modules.config.service import ConfigService
 from src.modules.groups.exceptions import (
     CannotChangeSubscriptionType, GroupHasActiveDependencies,
-    GroupNotFound, InvalidScheduleFormat
+    GroupNotFound, InvalidScheduleFormat, ScheduleRequired
 )
 from src.modules.groups.models import Group
 from src.modules.groups.repository import GroupRepository
 from src.modules.groups.schemas import GroupResponse
 from src.modules.users.models import User
+from src.common.level_rank import validate_level_targeting
+from src.modules.classes.service import _build_level
 
 
 def _build_teacher(user) -> Optional[TeacherBasic]:
@@ -29,22 +33,28 @@ def _build_teacher(user) -> Optional[TeacherBasic]:
     )
 
 
-def _build_response(group: Group) -> GroupResponse:
+def _build_response(group: Group, sessions_count: int = 0, next_session_date: Optional[date] = None) -> GroupResponse:
     # Resolve teacher: group.teacher or group.class_.teacher
     teacher = group.teacher if group.teacher_id else (group.class_.teacher if group.class_ else None)
     return GroupResponse(
         id=group.id,
+        branch_id=group.class_.branch_id if group.class_ else 0,
+        branch_name=group.class_.branch.name if group.class_ and group.class_.branch else "",
         class_id=group.class_id,
         class_name=group.class_.name if group.class_ else "",
         module_name=group.class_.module.name if (group.class_ and group.class_.module) else "",
         name=group.name,
         teacher=_build_teacher(teacher),
+        is_teacher_override=group.teacher_id is not None,
+        level=_build_level(group.class_) if group.class_ else None,
         schedule=group.schedule,
         room=group.room,
         max_students=group.max_students,
         price=float(group.price),
         subscription_type=group.subscription_type,
         session_count=group.session_count,
+        sessions_count=sessions_count,
+        next_session_date=next_session_date,
         status=group.status,
         last_generated_until=group.last_generated_until,
         created_at=group.created_at,
@@ -59,6 +69,7 @@ class GroupService:
         self._session = session
         self._repo = GroupRepository(session)
         self._class_repo = ClassRepository(session)
+        self._config_svc = ConfigService(session)
 
     def _get_branch_scope(self, actor: User) -> Optional[list[int]]:
         if actor.role == "admin":
@@ -87,7 +98,11 @@ class GroupService:
             branch_ids_scope=branch_ids_scope,
         )
         stats = await self._repo.get_stats(branch_ids_scope)
-        items = [_build_response(g).model_dump(by_alias=True) for g in groups]
+        items = []
+        for g in groups:
+            sc = await self._repo.get_sessions_count(g.id)
+            nsd = await self._repo.get_next_session_date(g.id)
+            items.append(_build_response(g, sc, nsd).model_dump(by_alias=True))
         return {
             "items": items,
             "pagination": build_pagination(params.get("page", 1), params.get("page_size", 20), total),
@@ -99,7 +114,9 @@ class GroupService:
         if not group:
             raise GroupNotFound()
         await self._check_branch_access(group.class_id, actor)
-        return _build_response(group).model_dump(by_alias=True)
+        sc = await self._repo.get_sessions_count(group_id)
+        nsd = await self._repo.get_next_session_date(group_id)
+        return _build_response(group, sc, nsd).model_dump(by_alias=True)
 
     async def create_group(self, data: dict, actor: User, ip: Optional[str] = None) -> dict:
         await self._check_branch_access(data["class_id"], actor)
@@ -132,7 +149,24 @@ class GroupService:
             ip_address=ip,
         )
         group = await self._repo.get_by_id(group.id)
-        return _build_response(group).model_dump(by_alias=True)
+
+        generated = 0
+        if data.get("generate_sessions") and group.schedule:
+            from_date = date.today()
+            config = await self._config_svc.get_config()
+            weeks_ahead = config.get("sessionGenerationHorizonWeeks", 8)
+            new_sessions, actual_until = await generate_sessions(
+                self._session, group, from_date, weeks_ahead, group.class_.period_end
+            )
+            group.last_generated_until = actual_until
+            await self._repo.save(group)
+            generated = len(new_sessions)
+
+        sc = await self._repo.get_sessions_count(group.id)
+        nsd = await self._repo.get_next_session_date(group.id)
+        
+        result = _build_response(group, sc, nsd).model_dump(by_alias=True)
+        return {"group": result, "sessionsGenerated": generated}
 
     async def update_group(self, group_id: int, data: dict, actor: User, ip: Optional[str] = None) -> dict:
         group = await self._repo.get_by_id(group_id)
@@ -161,7 +195,45 @@ class GroupService:
             metadata={"changedFields": changed}, ip_address=ip,
         )
         group = await self._repo.get_by_id(group_id)
-        return _build_response(group).model_dump(by_alias=True)
+        sc = await self._repo.get_sessions_count(group_id)
+        nsd = await self._repo.get_next_session_date(group_id)
+        return _build_response(group, sc, nsd).model_dump(by_alias=True)
+
+    async def generate_more_sessions(self, group_id: int, weeks_ahead: Optional[int], actor: User, ip: Optional[str] = None) -> dict:
+        group = await self._repo.get_by_id(group_id)
+        if not group:
+            raise GroupNotFound()
+        await self._check_branch_access(group.class_id, actor)
+        
+        if not weeks_ahead:
+            config = await self._config_svc.get_config()
+            weeks_ahead = config.get("sessionGenerationHorizonWeeks", 8)
+            
+        from_date = date.today()
+        if group.last_generated_until and group.last_generated_until >= from_date:
+            from datetime import timedelta
+            from_date = group.last_generated_until + timedelta(days=1)
+            
+        new_sessions, actual_until = await generate_sessions(
+            self._session, group, from_date, weeks_ahead, group.class_.period_end
+        )
+        
+        group.last_generated_until = actual_until
+        await self._repo.save(group)
+        
+        await log_action(
+            self._session, user_id=actor.id, action="SESSIONS_GENERATED",
+            category="academic", entity_type="group", entity_id=group.id,
+            metadata={"generatedCount": len(new_sessions), "until": str(actual_until)},
+            ip_address=ip,
+        )
+        
+        truncated = group.class_.period_end is not None and group.class_.period_end == actual_until
+        return {
+            "generatedCount": len(new_sessions),
+            "generatedUntil": actual_until,
+            "truncatedByPeriodEnd": truncated,
+        }
 
     async def set_status(self, group_id: int, status: str, actor: User, ip: Optional[str] = None) -> dict:
         group = await self._repo.get_by_id(group_id)
@@ -177,7 +249,9 @@ class GroupService:
             ip_address=ip,
         )
         group = await self._repo.get_by_id(group_id)
-        return _build_response(group).model_dump(by_alias=True)
+        sc = await self._repo.get_sessions_count(group_id)
+        nsd = await self._repo.get_next_session_date(group_id)
+        return _build_response(group, sc, nsd).model_dump(by_alias=True)
 
     async def delete_group(self, group_id: int, actor: User, ip: Optional[str] = None) -> None:
         group = await self._repo.get_by_id(group_id)

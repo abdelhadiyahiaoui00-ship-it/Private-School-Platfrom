@@ -74,6 +74,13 @@ class SessionRepository:
         result = await self._session.execute(q)
         return list(result.scalars().all()), total
 
+    async def has_attendance(self, session_id: int) -> bool:
+        result = await self._session.execute(
+            select(Session.attendance_marked_at).where(Session.id == session_id)
+        )
+        marked_at = result.scalar_one_or_none()
+        return marked_at is not None
+
     async def save(self, sess: Session) -> Session:
         merged = await self._session.merge(sess)
         await self._session.flush()

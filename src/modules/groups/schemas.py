@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from src.modules.classes.schemas import TeacherBasic
+from src.modules.classes.schemas import TeacherBasic, LevelTargetingSchema
 
 
 class ScheduleSlot(BaseModel):
@@ -16,17 +16,23 @@ class ScheduleSlot(BaseModel):
 class GroupResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     id: int
+    branch_id: int
+    branch_name: str
     class_id: int
     class_name: str
     module_name: str
     name: str
     teacher: Optional[TeacherBasic] = None
+    is_teacher_override: bool
+    level: LevelTargetingSchema
     schedule: list[ScheduleSlot]
     room: str
     max_students: int
     price: float
     subscription_type: str
     session_count: Optional[int] = None
+    sessions_count: int = 0
+    next_session_date: Optional[date] = None
     status: str
     last_generated_until: Optional[date] = None
     created_at: datetime
@@ -47,6 +53,7 @@ class CreateGroupRequest(BaseModel):
     price: float
     subscription_type: str
     session_count: Optional[int] = None
+    generate_sessions: bool = False
 
 
 class UpdateGroupRequest(BaseModel):

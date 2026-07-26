@@ -23,3 +23,21 @@ class CannotChangeSubscriptionType(AppException):
     status_code = 422
     code = "CANNOT_CHANGE_SUBSCRIPTION_TYPE"
     message = "Cannot change subscription type if there are active enrollments."
+
+
+class ScheduleOverlap(AppException):
+    status_code = 422
+    code = "SCHEDULE_OVERLAP"
+    message = "Schedule overlaps with an existing group."
+
+
+class ScheduleRequired(AppException):
+    status_code = 422
+    code = "SCHEDULE_REQUIRED"
+    message = "Schedule is required for this group type."
+
+
+class SessionCountRequired(AppException):
+    status_code = 422
+    code = "SESSION_COUNT_REQUIRED"
+    message = "Session count is required for session-based groups."

@@ -55,3 +55,9 @@ class Conflict(AppException):
     status_code = 409
     code = "CONFLICT"
     message = "A conflict occurred."
+
+
+class InvalidStateTransition(AppException):
+    status_code = 422
+    code = "INVALID_STATE_TRANSITION"
+    message = "Invalid state transition."

@@ -143,6 +143,8 @@ class UpdateUserRequest(BaseModel):
     branch_ids: Optional[list[int]] = None
     permissions: Optional[dict] = None
     default_commission_percent: Optional[float] = None
+    linked_student_ids: Optional[list[int]] = None
+    relationships: Optional[dict] = None
 
 
 class SetStatusRequest(BaseModel):

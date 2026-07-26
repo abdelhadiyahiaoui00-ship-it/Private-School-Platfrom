@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,6 +67,22 @@ class GroupRepository:
             )
         )
         return result.scalar_one() > 0
+
+    async def get_sessions_count(self, group_id: int) -> int:
+        result = await self._session.execute(
+            select(func.count(Session.id)).where(Session.group_id == group_id)
+        )
+        return result.scalar_one()
+
+    async def get_next_session_date(self, group_id: int) -> Optional[date]:
+        from datetime import date
+        result = await self._session.execute(
+            select(Session.session_date)
+            .where(Session.group_id == group_id, Session.session_date >= date.today())
+            .order_by(Session.session_date.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def has_any_dependencies(self, group_id: int) -> bool:
         c1 = await self._session.execute(select(func.count(Enrollment.id)).where(Enrollment.group_id == group_id))

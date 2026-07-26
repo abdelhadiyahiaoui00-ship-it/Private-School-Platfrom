@@ -86,7 +86,7 @@ async def refresh(
         secure=True,
     )
     
-    return {"data": {"user": user_out}}
+    return {"data": {"user": user_out, "accessToken": result["tokens"]["access_token"]}}
 
 
 @router.post("/sign-out", summary="Revoke refresh token")

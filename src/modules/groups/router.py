@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from src.core.database import DBSessionDep
 from src.modules.auth.dependencies import require_role
+from src.modules.sessions.schemas import GenerateSessionsRequest
 from src.modules.groups.schemas import (
     CreateGroupRequest, SetGroupStatusRequest, UpdateGroupRequest
 )
@@ -94,6 +95,21 @@ async def set_group_status(
 ):
     data = await service.set_status(
         group_id, body.status, actor,
+        ip=request.client.host if request.client else None,
+    )
+    return {"data": data}
+
+
+@router.post("/{group_id}/generate-sessions", status_code=201, summary="Generate sessions for group")
+async def generate_group_sessions(
+    group_id: int,
+    body: GenerateSessionsRequest,
+    request: Request,
+    actor: User = Depends(require_manage_classes),
+    service: GroupService = Depends(get_group_service),
+):
+    data = await service.generate_more_sessions(
+        group_id, body.weeks_ahead, actor,
         ip=request.client.host if request.client else None,
     )
     return {"data": data}

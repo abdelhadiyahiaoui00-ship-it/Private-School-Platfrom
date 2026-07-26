@@ -27,6 +27,10 @@ def require_manage_sessions(user: User = Depends(require_role(["owner", "superAd
     raise PermissionDenied(message="Requires manageSessions permission.")
 
 
+def require_delete_sessions(user: User = Depends(require_role(["owner", "superAdmin"]))) -> User:
+    return user
+
+
 @router.get("", summary="List sessions")
 async def list_sessions(
     actor: User = Depends(require_manage_sessions),
@@ -35,8 +39,8 @@ async def list_sessions(
     branch_id: Optional[int] = Query(None, alias="branchId"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     room: Optional[str] = Query(None),
-    from_date: Optional[date] = Query(None, alias="fromDate"),
-    to_date: Optional[date] = Query(None, alias="toDate"),
+    from_date: date = Query(..., alias="fromDate"),
+    to_date: date = Query(..., alias="toDate"),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
@@ -60,17 +64,7 @@ async def get_session(
     return {"data": data}
 
 
-@router.post("/generate", status_code=201, summary="Generate sessions")
-async def generate_sessions_endpoint(
-    body: GenerateSessionsRequest,
-    request: Request,
-    actor: User = Depends(require_manage_sessions),
-    service: SessionService = Depends(get_session_service),
-):
-    data = await service.trigger_generation(
-        body.group_id, body.from_date, body.weeks_ahead, actor,
-        ip=request.client.host if request.client else None,
-    )
+    data = await service.get_session(session_id, actor)
     return {"data": data}
 
 
@@ -93,7 +87,7 @@ async def update_session(
 async def delete_session(
     session_id: int,
     request: Request,
-    actor: User = Depends(require_manage_sessions),
+    actor: User = Depends(require_delete_sessions),
     service: SessionService = Depends(get_session_service),
 ):
     await service.delete_session(

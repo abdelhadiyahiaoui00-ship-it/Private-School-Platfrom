@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column
 from src.common.base_model import BaseModel
-
+from sqlalchemy.orm import relationship
 
 class Session(BaseModel):
     __tablename__ = "sessions"
@@ -30,3 +30,6 @@ class Session(BaseModel):
     attendance_marked_by: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True
     )
+
+    # Relationships
+    group_ = relationship("Group", lazy="selectin")

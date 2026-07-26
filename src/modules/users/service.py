@@ -364,6 +364,30 @@ class UserService:
                 await self._repo.set_branch_assignments(user_id, data["branch_ids"])
                 changed.append("branchIds")
 
+        if user.role == "parent" and data.get("linked_student_ids") is not None:
+            linked_ids = data["linked_student_ids"]
+            rels = data.get("relationships") or {}
+            existing_links = user.linked_students
+            existing_map = {link.student_id: link for link in existing_links}
+            
+            for s_id in linked_ids:
+                rel = rels.get(str(s_id), "parent")
+                if s_id in existing_map:
+                    # Update relationship if changed
+                    if existing_map[s_id].relationship != rel:
+                        existing_map[s_id].relationship = rel
+                else:
+                    # Add new link
+                    new_link = ParentStudentLink(
+                        parent_id=user.id,
+                        student_id=s_id,
+                        relationship=rel,
+                        created_by=actor.id,
+                    )
+                    self._session.add(new_link)
+                    user.linked_students.append(new_link)
+            changed.append("linkedStudentIds")
+
         user = await self._repo.save(user)
 
         await log_action(

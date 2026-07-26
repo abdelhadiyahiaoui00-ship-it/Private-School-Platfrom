@@ -9,7 +9,7 @@ from src.modules.audit.service import log_action
 from src.modules.config.service import ConfigService
 from src.modules.groups.models import Group
 from src.modules.groups.repository import GroupRepository
-from src.modules.sessions.exceptions import SessionNotFound
+from src.modules.sessions.exceptions import SessionNotFound, DateRangeTooWide, SessionHasAttendance
 from src.modules.sessions.models import Session
 from src.modules.sessions.repository import SessionRepository
 from src.modules.sessions.schemas import SessionResponse
@@ -73,6 +73,13 @@ class SessionService:
 
     async def list_sessions(self, params: dict, actor: User) -> dict:
         branch_ids_scope = self._get_branch_scope(actor)
+        
+        from_date = params.get("from_date")
+        to_date = params.get("to_date")
+        if from_date and to_date:
+            if (to_date - from_date).days > 62:
+                raise DateRangeTooWide()
+                
         sessions, total = await self._repo.get_all(
             group_id=params.get("group_id"),
             branch_id=params.get("branch_id"),
@@ -101,42 +108,7 @@ class SessionService:
             raise ForbiddenBranch()
         return _build_response(sess).model_dump(by_alias=True)
 
-    async def trigger_generation(self, group_id: int, from_date: date, weeks_ahead: Optional[int], actor: User, ip: Optional[str] = None) -> dict:
-        group = await self._group_repo.get_by_id(group_id)
-        if not group:
-            from src.modules.groups.exceptions import GroupNotFound
-            raise GroupNotFound()
-        
-        branch_ids_scope = self._get_branch_scope(actor)
-        if branch_ids_scope is not None and group.class_.branch_id not in branch_ids_scope:
-            from src.core.exceptions import ForbiddenBranch
-            raise ForbiddenBranch()
-
-        if not weeks_ahead:
-            config = await self._config_svc.get_config()
-            weeks_ahead = config.get("sessionGenerationHorizonWeeks", 8)
-
-        # Generate sessions
-        new_sessions, actual_until = await generate_sessions(
-            self._session, group, from_date, weeks_ahead, group.class_.period_end
-        )
-
-        group.last_generated_until = actual_until
-        await self._group_repo.save(group)
-
-        await log_action(
-            self._session, user_id=actor.id, action="SESSIONS_GENERATED",
-            category="academic", entity_type="group", entity_id=group.id,
-            metadata={"generatedCount": len(new_sessions), "until": str(actual_until)},
-            ip_address=ip,
-        )
-
-        truncated = group.class_.period_end is not None and group.class_.period_end == actual_until
-        return {
-            "generatedCount": len(new_sessions),
-            "generatedUntil": actual_until,
-            "truncatedByPeriodEnd": truncated,
-        }
+        return _build_response(sess).model_dump(by_alias=True)
 
     async def update_session(self, session_id: int, data: dict, actor: User, ip: Optional[str] = None) -> dict:
         sess = await self._repo.get_by_id(session_id)
@@ -170,6 +142,9 @@ class SessionService:
         if branch_ids_scope is not None and sess.branch_id not in branch_ids_scope:
             from src.core.exceptions import ForbiddenBranch
             raise ForbiddenBranch()
+        
+        if await self._repo.has_attendance(session_id):
+            raise SessionHasAttendance()
         
         await log_action(
             self._session, user_id=actor.id, action="SESSION_DELETED",
