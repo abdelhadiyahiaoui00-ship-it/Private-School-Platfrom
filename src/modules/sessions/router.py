@@ -39,8 +39,8 @@ async def list_sessions(
     branch_id: Optional[int] = Query(None, alias="branchId"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     room: Optional[str] = Query(None),
-    from_date: date = Query(..., alias="fromDate"),
-    to_date: date = Query(..., alias="toDate"),
+    date_from: date = Query(..., alias="dateFrom"),
+    date_to: date = Query(..., alias="dateTo"),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
@@ -48,7 +48,7 @@ async def list_sessions(
     result = await service.list_sessions({
         "group_id": group_id, "branch_id": branch_id,
         "teacher_id": teacher_id, "room": room,
-        "from_date": from_date, "to_date": to_date, "status": status,
+        "from_date": date_from, "to_date": date_to, "status": status,
         "page": page, "page_size": page_size,
     }, actor)
     return {"data": result}
