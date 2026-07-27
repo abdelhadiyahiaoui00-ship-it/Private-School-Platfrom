@@ -27,18 +27,9 @@ class PermissionsSchema(BaseModel):
     view_logs: bool = False
 
 
-class ParentLinkBasic(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
-    id: int
-    parent_id: int
-    student_id: int
-    relationship: str
-    created_at: datetime
-
-
 # ─── User response schemas ────────────────────────────────────────────────────
 
-class UserResponse(BaseModel):
+class UserBasic(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
 
     id: int
@@ -55,17 +46,29 @@ class UserResponse(BaseModel):
     must_change_password: bool
     notifications_enabled: bool
     default_commission_percent: Optional[float]
-    permissions: Optional[PermissionsSchema]
-    assigned_branches: list[BranchBasic]
-    linked_students: list[ParentLinkBasic]
-    linked_parents: list[ParentLinkBasic]
-    children_count: int
-    created_by: Optional[int]
+    permissions: Optional[PermissionsSchema] = None
+    assigned_branches: list[BranchBasic] = []
+    children_count: int = 0
+    created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    last_login: Optional[datetime]
+    last_login: Optional[datetime] = None
 
 
+class UserResponse(UserBasic):
+    linked_students: list['ParentLinkBasic'] = []
+    linked_parents: list['ParentLinkBasic'] = []
+
+
+class ParentLinkBasic(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+    id: int
+    parent_id: int
+    student_id: int
+    relationship: str
+    created_at: datetime
+    parent: Optional[UserBasic] = None
+    student: Optional[UserBasic] = None
 class UserDetailResponse(UserResponse):
     """Single-user view — adds deactivation info and nested children/parents."""
     deactivated_at: Optional[datetime] = None
@@ -174,6 +177,8 @@ class ParentLinkResponse(BaseModel):
     relationship: str
     created_by: Optional[int]
     created_at: datetime
+    parent: Optional[UserBasic] = None
+    student: Optional[UserBasic] = None
 
 
 class CreateParentLinkRequest(BaseModel):

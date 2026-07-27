@@ -53,6 +53,40 @@ def _generate_temp_password(length: int = 12) -> str:
             return pwd
 
 
+def _build_user_basic(user: User):
+    from src.modules.users.schemas import UserBasic
+    assigned_branches = [
+        BranchBasic(id=ub.branch_id, name=ub.branch.name if ub.branch else "")
+        for ub in (user.branch_links or [])
+    ]
+    permissions = None
+    if user.role == "admin" and user.permissions:
+        permissions = PermissionsSchema(**user.permissions)
+        
+    return UserBasic(
+        id=user.id,
+        email=user.email,
+        phone=user.phone,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+        status=user.status,
+        avatar_url=user.avatar_url,
+        date_of_birth=user.date_of_birth,
+        gender=user.gender,
+        language=user.language,
+        must_change_password=user.must_change_password,
+        notifications_enabled=user.notifications_enabled,
+        default_commission_percent=float(user.default_commission_percent) if user.default_commission_percent is not None else None,
+        permissions=permissions,
+        assigned_branches=assigned_branches,
+        children_count=user.children_count,
+        created_by=user.created_by,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        last_login=user.last_login,
+    )
+
 def _build_user_response(user: User) -> dict:
     """Convert ORM User → camelCase dict for API response."""
     assigned_branches = [
@@ -66,6 +100,7 @@ def _build_user_response(user: User) -> dict:
             student_id=lnk.student_id,
             relationship=lnk.relationship,
             created_at=lnk.created_at,
+            student=_build_user_basic(lnk.student) if getattr(lnk, "student", None) else None,
         )
         for lnk in (user.linked_students or [])
     ]
@@ -76,6 +111,7 @@ def _build_user_response(user: User) -> dict:
             student_id=lnk.student_id,
             relationship=lnk.relationship,
             created_at=lnk.created_at,
+            parent=_build_user_basic(lnk.parent) if getattr(lnk, "parent", None) else None,
         )
         for lnk in (user.linked_parents or [])
     ]

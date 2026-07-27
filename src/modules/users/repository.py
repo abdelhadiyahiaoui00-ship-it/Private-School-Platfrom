@@ -23,8 +23,8 @@ class UserRepository:
             .where(User.id == user_id)
             .options(
                 selectinload(User.branch_links).selectinload(UserBranch.branch),
-                selectinload(User.linked_students),
-                selectinload(User.linked_parents),
+                selectinload(User.linked_students).selectinload(ParentStudentLink.student),
+                selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
             )
         )
         return result.scalar_one_or_none()
@@ -34,8 +34,8 @@ class UserRepository:
             select(User).where(func.lower(User.email) == email.lower())
             .options(
                 selectinload(User.branch_links).selectinload(UserBranch.branch),
-                selectinload(User.linked_students),
-                selectinload(User.linked_parents),
+                selectinload(User.linked_students).selectinload(ParentStudentLink.student),
+                selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
             )
         )
         return result.scalar_one_or_none()
@@ -45,8 +45,8 @@ class UserRepository:
             select(User).where(User.phone == phone)
             .options(
                 selectinload(User.branch_links).selectinload(UserBranch.branch),
-                selectinload(User.linked_students),
-                selectinload(User.linked_parents),
+                selectinload(User.linked_students).selectinload(ParentStudentLink.student),
+                selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
             )
         )
         return result.scalar_one_or_none()
@@ -62,8 +62,8 @@ class UserRepository:
             )
             .options(
                 selectinload(User.branch_links).selectinload(UserBranch.branch),
-                selectinload(User.linked_students),
-                selectinload(User.linked_parents),
+                selectinload(User.linked_students).selectinload(ParentStudentLink.student),
+                selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
             )
         )
         return result.scalar_one_or_none()
@@ -101,8 +101,8 @@ class UserRepository:
     ) -> tuple[list[User], int]:
         q = select(User).options(
             selectinload(User.branch_links).selectinload(UserBranch.branch),
-            selectinload(User.linked_students),
-            selectinload(User.linked_parents),
+            selectinload(User.linked_students).selectinload(ParentStudentLink.student),
+            selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
         )
 
         # Determine branch filters
