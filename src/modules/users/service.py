@@ -80,7 +80,7 @@ def _build_user_basic(user: User):
         default_commission_percent=float(user.default_commission_percent) if user.default_commission_percent is not None else None,
         permissions=permissions,
         assigned_branches=assigned_branches,
-        children_count=user.children_count,
+        children_count=len(user.__dict__.get("linked_students", [])),
         created_by=user.created_by,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -207,7 +207,7 @@ class UserService:
                 from src.core.exceptions import ForbiddenBranch
                 raise ForbiddenBranch()
 
-        return user
+        return _build_user_response(user)
 
     # ─── Create ───────────────────────────────────────────────────────────────
 

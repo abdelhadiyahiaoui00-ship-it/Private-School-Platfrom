@@ -60,7 +60,7 @@ async def list_users(
 
     from src.modules.users.schemas import PaginationMeta, UserStats
 
-    items_out = [UserResponse.model_validate(u).model_dump(by_alias=True) for u in result["items"]]
+    items_out = [u.model_dump(by_alias=True) for u in result["items"]]
     pagination_out = PaginationMeta(**result["pagination"]).model_dump(by_alias=True)
     stats_out = UserStats(**result["stats"]).model_dump(by_alias=True)
 
@@ -108,8 +108,8 @@ async def bulk_action(
 async def get_me_alias(
     actor: CurrentUser,
 ):
-    from src.modules.users.schemas import UserResponse
-    user_out = UserResponse.model_validate(actor).model_dump(by_alias=True)
+    from src.modules.users.service import _build_user_response
+    user_out = _build_user_response(actor).model_dump(by_alias=True)
     return {"data": user_out}
 
 
@@ -122,7 +122,7 @@ async def get_user(
     service: UserService = Depends(get_user_service),
 ):
     user = await service.get_user(user_id, actor)
-    return {"data": UserResponse.model_validate(user).model_dump(by_alias=True)}
+    return {"data": user.model_dump(by_alias=True)}
 
 
 # ─── Update ───────────────────────────────────────────────────────────────────
