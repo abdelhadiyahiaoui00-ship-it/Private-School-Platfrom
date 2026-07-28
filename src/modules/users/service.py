@@ -437,6 +437,7 @@ class UserService:
             ip_address=ip,
         )
 
+        user = await self._repo.get_by_id(user_id)
         return _build_user_response(user)
 
     # ─── Set status ───────────────────────────────────────────────────────────
