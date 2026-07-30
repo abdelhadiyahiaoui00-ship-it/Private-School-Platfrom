@@ -37,6 +37,7 @@ async def list_sessions(
     service: SessionService = Depends(get_session_service),
     group_id: Optional[int] = Query(None, alias="groupId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     room: Optional[str] = Query(None),
     date_from: date = Query(..., alias="dateFrom"),
@@ -45,8 +46,16 @@ async def list_sessions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
 ):
+    parsed_branch_ids: Optional[list[int]] = None
+    if branch_ids_raw and not branch_id:
+        try:
+            parsed_branch_ids = [int(x.strip()) for x in branch_ids_raw.split(",") if x.strip()]
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail="branchIds must be comma-separated integers")
+
     result = await service.list_sessions({
-        "group_id": group_id, "branch_id": branch_id,
+        "group_id": group_id, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
         "teacher_id": teacher_id, "room": room,
         "from_date": date_from, "to_date": date_to, "status": status,
         "page": page, "page_size": page_size,

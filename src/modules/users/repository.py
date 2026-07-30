@@ -92,42 +92,53 @@ class UserRepository:
         role: Optional[str] = None,
         status: Optional[str] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         search: Optional[str] = None,
         page: int = 1,
         page_size: int = 10,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-        branch_ids_scope: Optional[list[int]] = None,  # admin scope
+        branch_ids_scope: Optional[list[int]] = None,  # admin/teacher scope
     ) -> tuple[list[User], int]:
+        from sqlalchemy import exists, not_
         q = select(User).options(
             selectinload(User.branch_links).selectinload(UserBranch.branch),
             selectinload(User.linked_students).selectinload(ParentStudentLink.student),
             selectinload(User.linked_parents).selectinload(ParentStudentLink.parent),
         )
 
-        # Determine branch filters
-        branch_filter_ids: Optional[list[int]] = None
-        if branch_ids_scope is not None and branch_id:
-            # Admin scoped AND specific branch filter — intersection
-            if branch_id in branch_ids_scope:
-                branch_filter_ids = [branch_id]
+        # Determine effective branch filter set
+        # Precedence: branchId (singular) wins over branchIds (list)
+        # Then intersect with branch_ids_scope for scoped callers
+        effective_ids: Optional[list[int]] = None
+        if branch_id:
+            # Singular branchId wins
+            if branch_ids_scope is not None:
+                # intersect — only keep if in scope
+                effective_ids = [branch_id] if branch_id in branch_ids_scope else [-1]
             else:
-                # Admin doesn't have access to this branch — return empty
-                branch_filter_ids = [-1]  # impossible ID, returns nothing
+                effective_ids = [branch_id]
+        elif branch_ids:
+            if branch_ids_scope is not None:
+                effective_ids = [b for b in branch_ids if b in branch_ids_scope] or [-1]
+            else:
+                effective_ids = branch_ids
         elif branch_ids_scope is not None:
-            branch_filter_ids = branch_ids_scope
-        elif branch_id:
-            branch_filter_ids = [branch_id]
+            # scoped caller sent no filter — default to full own set
+            effective_ids = branch_ids_scope
 
-        if branch_filter_ids is not None:
-            # Use an IN subquery instead of JOIN + DISTINCT to avoid PostgreSQL JSON distinct errors
-            q = q.where(
-                User.id.in_(
-                    select(UserBranch.user_id).where(
-                        UserBranch.branch_id.in_(branch_filter_ids)
-                    )
+        if effective_ids is not None:
+            # Users who have an assignment matching the filter OR have NO assignment at all
+            has_match = exists(
+                select(UserBranch.user_id).where(
+                    UserBranch.user_id == User.id,
+                    UserBranch.branch_id.in_(effective_ids)
                 )
             )
+            has_any = exists(
+                select(UserBranch.user_id).where(UserBranch.user_id == User.id)
+            )
+            q = q.where(has_match | ~has_any)
 
         # Filters
         if role and role != "all":

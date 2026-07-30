@@ -32,6 +32,7 @@ async def list_classes(
     service: ClassService = Depends(get_class_service),
     search: Optional[str] = Query(None),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     module_id: Optional[int] = Query(None, alias="moduleId"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     status: str = Query("active"),
@@ -41,9 +42,18 @@ async def list_classes(
     sort_by: str = Query("createdAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
 ):
+    parsed_branch_ids: Optional[list[int]] = None
+    if branch_ids_raw and not branch_id:
+        try:
+            parsed_branch_ids = [int(x.strip()) for x in branch_ids_raw.split(",") if x.strip()]
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail="branchIds must be comma-separated integers")
+
     result = await service.list_classes({
-        "search": search, "branch_id": branch_id, "module_id": module_id,
-        "teacher_id": teacher_id, "status": status, "education_stage": education_stage,
+        "search": search, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
+        "module_id": module_id, "teacher_id": teacher_id, "status": status,
+        "education_stage": education_stage,
         "page": page, "page_size": page_size, "sort_by": sort_by, "sort_order": sort_order,
     }, actor)
     return {"data": result}

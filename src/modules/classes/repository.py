@@ -29,6 +29,7 @@ class ClassRepository:
         self,
         search: Optional[str] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         module_id: Optional[int] = None,
         teacher_id: Optional[int] = None,
         status: str = "active",
@@ -48,10 +49,17 @@ class ClassRepository:
             )
         )
 
-        if branch_ids_scope is not None:
-            q = q.where(Class.branch_id.in_(branch_ids_scope))
+        # Effective branch filter — branchId wins; then branchIds; then scope default
+        effective_ids: Optional[list[int]] = None
         if branch_id:
-            q = q.where(Class.branch_id == branch_id)
+            effective_ids = [branch_id] if (branch_ids_scope is None or branch_id in branch_ids_scope) else [-1]
+        elif branch_ids:
+            effective_ids = branch_ids if branch_ids_scope is None else [b for b in branch_ids if b in branch_ids_scope] or [-1]
+        elif branch_ids_scope is not None:
+            effective_ids = branch_ids_scope
+
+        if effective_ids is not None:
+            q = q.where(Class.branch_id.in_(effective_ids))
         if module_id:
             q = q.where(Class.module_id == module_id)
         if teacher_id:

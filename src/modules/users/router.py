@@ -40,17 +40,28 @@ async def list_users(
     role: str = Query("all"),
     status: str = Query("all"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     search: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, alias="pageSize", ge=1, le=100),
     sort_by: str = Query("createdAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
 ):
+    # Parse branchIds comma-separated string; branchId (singular) takes precedence
+    parsed_branch_ids: Optional[list[int]] = None
+    if branch_ids_raw and not branch_id:
+        try:
+            parsed_branch_ids = [int(x.strip()) for x in branch_ids_raw.split(",") if x.strip()]
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail="branchIds must be comma-separated integers")
+
     result = await service.list_users(
         actor=actor,
         role=role or None,
         status=status or None,
         branch_id=branch_id,
+        branch_ids=parsed_branch_ids,
         search=search or None,
         page=page,
         page_size=page_size,

@@ -96,9 +96,22 @@ class ClassService:
 
     async def list_classes(self, params: dict, actor: User) -> dict:
         branch_ids_scope = self._get_branch_scope(actor)
+
+        # 403 check: scoped caller must only request branches they own
+        branch_id = params.get("branch_id")
+        branch_ids = params.get("branch_ids")
+        if actor.role == "admin" and branch_ids_scope is not None:
+            if branch_id and branch_id not in branch_ids_scope:
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
+            if branch_ids and not set(branch_ids).issubset(set(branch_ids_scope)):
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
+
         classes, total = await self._repo.get_all(
             search=params.get("search"),
-            branch_id=params.get("branch_id"),
+            branch_id=branch_id,
+            branch_ids=branch_ids,
             module_id=params.get("module_id"),
             teacher_id=params.get("teacher_id"),
             status=params.get("status", "active"),

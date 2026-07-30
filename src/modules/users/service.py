@@ -162,21 +162,32 @@ class UserService:
         role: Optional[str] = None,
         status: Optional[str] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         search: Optional[str] = None,
         page: int = 1,
         page_size: int = 10,
         sort_by: str = "createdAt",
         sort_order: str = "desc",
     ) -> dict:
-        # Branch scope for admin
+        # Branch scope for admin — their own assigned branches
         branch_ids_scope = None
         if actor.role == "admin":
             branch_ids_scope = [ub.branch_id for ub in (actor.branch_links or [])]
+
+        # 403 check: if admin sends branchIds, every ID must be in their scope
+        if actor.role == "admin" and branch_ids_scope is not None:
+            if branch_id and branch_id not in branch_ids_scope:
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
+            if branch_ids and not set(branch_ids).issubset(set(branch_ids_scope)):
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
 
         users, total = await self._repo.list_users(
             role=role,
             status=status,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             search=search,
             page=page,
             page_size=page_size,

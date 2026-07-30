@@ -33,13 +33,22 @@ async def list_groups(
     service: GroupService = Depends(get_group_service),
     class_id: Optional[int] = Query(None, alias="classId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     status: str = Query("active"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
 ):
+    parsed_branch_ids: Optional[list[int]] = None
+    if branch_ids_raw and not branch_id:
+        try:
+            parsed_branch_ids = [int(x.strip()) for x in branch_ids_raw.split(",") if x.strip()]
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail="branchIds must be comma-separated integers")
+
     result = await service.list_groups({
-        "class_id": class_id, "branch_id": branch_id,
+        "class_id": class_id, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
         "teacher_id": teacher_id, "status": status,
         "page": page, "page_size": page_size,
     }, actor)

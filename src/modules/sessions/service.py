@@ -73,6 +73,17 @@ class SessionService:
 
     async def list_sessions(self, params: dict, actor: User) -> dict:
         branch_ids_scope = self._get_branch_scope(actor)
+
+        # 403 check: scoped caller must only request branches they own
+        branch_id = params.get("branch_id")
+        branch_ids = params.get("branch_ids")
+        if actor.role == "admin" and branch_ids_scope is not None:
+            if branch_id and branch_id not in branch_ids_scope:
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
+            if branch_ids and not set(branch_ids).issubset(set(branch_ids_scope)):
+                from src.core.exceptions import ForbiddenBranch
+                raise ForbiddenBranch()
         
         from_date = params.get("from_date")
         to_date = params.get("to_date")
@@ -82,7 +93,8 @@ class SessionService:
                 
         sessions, total = await self._repo.get_all(
             group_id=params.get("group_id"),
-            branch_id=params.get("branch_id"),
+            branch_id=branch_id,
+            branch_ids=branch_ids,
             teacher_id=params.get("teacher_id"),
             room=params.get("room"),
             from_date=params.get("from_date"),
