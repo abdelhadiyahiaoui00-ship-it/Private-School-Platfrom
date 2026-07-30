@@ -214,7 +214,8 @@ class UserService:
         if actor.role == "admin":
             actor_branch_ids = [ub.branch_id for ub in (actor.branch_links or [])]
             user_branch_ids = [ub.branch_id for ub in (user.branch_links or [])]
-            if not any(b in actor_branch_ids for b in user_branch_ids):
+            # If the user has branches, admin must have access to at least one of them
+            if user_branch_ids and not any(b in actor_branch_ids for b in user_branch_ids):
                 from src.core.exceptions import ForbiddenBranch
                 raise ForbiddenBranch()
 
