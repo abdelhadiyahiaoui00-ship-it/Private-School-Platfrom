@@ -409,6 +409,9 @@ class UserService:
                 user.permissions = data["permissions"]
                 changed.append("permissions")
             if "branch_ids" in data and data["branch_ids"] is not None:
+                if user.role == "admin" and not data["branch_ids"]:
+                    from src.modules.users.exceptions import AdminRequiresBranch
+                    raise AdminRequiresBranch()
                 await self._repo.set_branch_assignments(user_id, data["branch_ids"])
                 changed.append("branchIds")
 
