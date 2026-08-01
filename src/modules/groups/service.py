@@ -33,7 +33,12 @@ def _build_teacher(user) -> Optional[TeacherBasic]:
     )
 
 
-def _build_response(group: Group, sessions_count: int = 0, next_session_date: Optional[date] = None) -> GroupResponse:
+def _build_response(
+    group: Group,
+    sessions_count: int = 0,
+    next_session_date: Optional[date] = None,
+    active_enrollments: int = 0
+) -> GroupResponse:
     # Resolve teacher: group.teacher or group.class_.teacher
     teacher = group.teacher if group.teacher_id else (group.class_.teacher if group.class_ else None)
     return GroupResponse(
@@ -59,8 +64,9 @@ def _build_response(group: Group, sessions_count: int = 0, next_session_date: Op
         last_generated_until=group.last_generated_until,
         created_at=group.created_at,
         updated_at=group.updated_at,
-        active_enrollments=0,  # Sprint 5
-        available_seats=group.max_students,  # Sprint 5
+        active_enrollments=active_enrollments,
+        available_seats=max(0, group.max_students - active_enrollments),
+        is_full=active_enrollments >= group.max_students,
     )
 
 
@@ -109,13 +115,16 @@ class GroupService:
             page=params.get("page", 1),
             page_size=params.get("page_size", 20),
             branch_ids_scope=branch_ids_scope,
+            has_availability=params.get("has_availability"),
+            exclude_group_id=params.get("exclude_group_id"),
         )
         stats = await self._repo.get_stats(branch_ids_scope)
         items = []
         for g in groups:
             sc = await self._repo.get_sessions_count(g.id)
             nsd = await self._repo.get_next_session_date(g.id)
-            items.append(_build_response(g, sc, nsd).model_dump(by_alias=True))
+            ae = await self._repo.count_active_enrollments(g.id)
+            items.append(_build_response(g, sc, nsd, ae).model_dump(by_alias=True))
         return {
             "items": items,
             "pagination": build_pagination(params.get("page", 1), params.get("page_size", 20), total),
@@ -129,7 +138,8 @@ class GroupService:
         await self._check_branch_access(group.class_id, actor)
         sc = await self._repo.get_sessions_count(group_id)
         nsd = await self._repo.get_next_session_date(group_id)
-        return _build_response(group, sc, nsd).model_dump(by_alias=True)
+        ae = await self._repo.count_active_enrollments(group_id)
+        return _build_response(group, sc, nsd, ae).model_dump(by_alias=True)
 
     async def create_group(self, data: dict, actor: User, ip: Optional[str] = None) -> dict:
         await self._check_branch_access(data["class_id"], actor)

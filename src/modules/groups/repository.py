@@ -33,6 +33,8 @@ class GroupRepository:
         branch_ids: Optional[list[int]] = None,
         teacher_id: Optional[int] = None,
         status: str = "active",
+        has_availability: Optional[bool] = None,
+        exclude_group_id: Optional[int] = None,
         page: int = 1,
         page_size: int = 20,
         branch_ids_scope: Optional[list[int]] = None,
@@ -62,6 +64,23 @@ class GroupRepository:
             q = q.where(Group.teacher_id == teacher_id)
         if status and status != "all":
             q = q.where(Group.status == status)
+        if exclude_group_id:
+            q = q.where(Group.id != exclude_group_id)
+            
+        if has_availability is not None:
+            # Subquery to count active+pending enrollments
+            active_counts = (
+                select(Enrollment.group_id, func.count(Enrollment.id).label("active_count"))
+                .where(Enrollment.status.in_(["pending", "active"]))
+                .group_by(Enrollment.group_id)
+                .subquery()
+            )
+            q = q.outerjoin(active_counts, active_counts.c.group_id == Group.id)
+            if has_availability:
+                # Group max_students > active_count
+                q = q.where(Group.max_students > func.coalesce(active_counts.c.active_count, 0))
+            else:
+                q = q.where(Group.max_students <= func.coalesce(active_counts.c.active_count, 0))
 
         count_q = select(func.count()).select_from(q.subquery())
         total = (await self._session.execute(count_q)).scalar_one()
@@ -78,6 +97,15 @@ class GroupRepository:
             )
         )
         return result.scalar_one() > 0
+
+    async def count_active_enrollments(self, group_id: int) -> int:
+        result = await self._session.execute(
+            select(func.count(Enrollment.id)).where(
+                Enrollment.group_id == group_id,
+                Enrollment.status.in_(["pending", "active"])
+            )
+        )
+        return result.scalar_one()
 
     async def get_sessions_count(self, group_id: int) -> int:
         result = await self._session.execute(

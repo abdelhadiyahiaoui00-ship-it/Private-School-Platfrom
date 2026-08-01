@@ -26,6 +26,8 @@ from src.modules.modules.router import router as modules_router
 from src.modules.classes.router import router as classes_router
 from src.modules.groups.router import router as groups_router
 from src.modules.sessions.router import router as sessions_router
+from src.modules.enrollments.router import enrollment_router, visitor_router
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
@@ -52,17 +54,77 @@ async def run_migrations() -> None:
     await loop.run_in_executor(None, _upgrade)
 
 
+async def expire_overdue_visitor_reservations():
+    """Runs hourly to expire visitor reservations past hold_hours + 48h grace period."""
+    from src.core.database import sessionmanager
+    from sqlalchemy import select
+    from datetime import datetime, timezone, timedelta
+    from src.modules.config.models import SystemConfig
+    from src.modules.enrollments.models import Enrollment
+    from src.modules.enrollments.visitor_models import VisitorEnrollmentRequest
+    
+    async with sessionmanager.session() as db:
+        config_result = await db.execute(select(SystemConfig).limit(1))
+        config = config_result.scalar_one_or_none()
+        hold_hours = config.enrollment_reservation_hold_hours if config else 72
+        
+        # Expire at hold_hours + 48h grace period
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hold_hours + 48)
+        
+        # Find overdue pending visitor requests
+        result = await db.execute(
+            select(VisitorEnrollmentRequest)
+            .join(Enrollment, Enrollment.id == VisitorEnrollmentRequest.enrollment_id)
+            .where(
+                VisitorEnrollmentRequest.status == "pending",
+                Enrollment.source == "visitor_form",
+                Enrollment.created_at < cutoff
+            )
+        )
+        overdue_reqs = result.scalars().all()
+        for req in overdue_reqs:
+            req.status = "rejected"
+            req.notes = (req.notes or "") + "\n[Auto-expired due to no-show]"
+            
+            enrollment = await db.execute(select(Enrollment).where(Enrollment.id == req.enrollment_id))
+            enrollment = enrollment.scalar_one()
+            
+            # Since it's pending visitor, it holds a seat. We must free it (cancel enrollment)
+            enrollment.status = "cancelled"
+            enrollment.cancelled_at = datetime.now(timezone.utc)
+            enrollment.cancelled_reason = "auto_expired"
+            
+            # Promote next in waitlist
+            from src.common.enrollment_engine import promote_next_in_waitlist
+            await promote_next_in_waitlist(db, enrollment.group_id, is_manual=False)
+            
+        if overdue_reqs:
+            await db.commit()
+            logger.info(f"Auto-expired {len(overdue_reqs)} overdue visitor reservations.")
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Application starting up...")
+    scheduler = AsyncIOScheduler()
     try:
         await run_migrations()
+        scheduler.add_job(
+            expire_overdue_visitor_reservations, 
+            'interval', 
+            hours=1, 
+            id='expire_reservations',
+            replace_existing=True
+        )
+        scheduler.start()
         # You can add global startup jobs here
         yield
     except Exception as exc:
         logger.critical("CRITICAL: Application failed to start: %s", exc, exc_info=True)
         raise
 
+    scheduler.shutdown()
     await sessionmanager.close()
     logger.info("Application shutdown: database closed.")
 
@@ -127,6 +189,8 @@ def create_app() -> FastAPI:
     app.include_router(classes_router, prefix="/api")
     app.include_router(groups_router, prefix="/api")
     app.include_router(sessions_router, prefix="/api")
+    app.include_router(visitor_router, prefix="/api")
+    app.include_router(enrollment_router, prefix="/api")
 
     @app.api_route("/health", methods=["GET", "HEAD"])
     async def health_check():

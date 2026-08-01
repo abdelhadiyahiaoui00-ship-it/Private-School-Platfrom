@@ -40,6 +40,8 @@ class GroupResponse(BaseModel):
     # Placeholders for Sprint 5
     active_enrollments: int = 0
     available_seats: int = 0
+    is_full: bool = False
+
 
 
 class CreateGroupRequest(BaseModel):

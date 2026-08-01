@@ -56,6 +56,12 @@ class ConfigService:
                 from src.core.exceptions import ValidationError
                 raise ValidationError(message="sessionGenerationHorizonWeeks must be between 1 and 52.")
 
+        if "enrollment_reservation_hold_hours" in data and data["enrollment_reservation_hold_hours"] is not None:
+            v = data["enrollment_reservation_hold_hours"]
+            if not (1 <= v <= 336): # Max 14 days
+                from src.core.exceptions import ValidationError
+                raise ValidationError(message="enrollmentReservationHoldHours must be between 1 and 336.")
+
         if "founding_year" in data and data["founding_year"] is not None:
             current_year = date.today().year
             if not (1900 <= data["founding_year"] <= current_year):
@@ -69,6 +75,7 @@ class ConfigService:
             "about_title", "about_description",
             "monthly_default_duration_days", "monthly_expiry_warning_days",
             "session_based_expiry_warning_sessions", "session_generation_horizon_weeks",
+            "enrollment_reservation_hold_hours",
         ]
         for field in scalar_fields:
             if field in data:
@@ -142,6 +149,7 @@ class ConfigService:
             monthly_expiry_warning_days=config.monthly_expiry_warning_days,
             session_based_expiry_warning_sessions=config.session_based_expiry_warning_sessions,
             session_generation_horizon_weeks=config.session_generation_horizon_weeks,
+            enrollment_reservation_hold_hours=config.enrollment_reservation_hold_hours,
             updated_at=config.updated_at,
             updated_by=config.updated_by,
         )

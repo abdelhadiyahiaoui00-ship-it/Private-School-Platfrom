@@ -36,6 +36,8 @@ async def list_groups(
     branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
     status: str = Query("active"),
+    has_availability: Optional[bool] = Query(None, alias="hasAvailability"),
+    exclude_group_id: Optional[int] = Query(None, alias="excludeGroupId"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
 ):
@@ -50,6 +52,7 @@ async def list_groups(
     result = await service.list_groups({
         "class_id": class_id, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
         "teacher_id": teacher_id, "status": status,
+        "has_availability": has_availability, "exclude_group_id": exclude_group_id,
         "page": page, "page_size": page_size,
     }, actor)
     return {"data": result}
