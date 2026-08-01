@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.core.security import get_current_user, require_manage_enrollments
+from src.modules.auth.dependencies import get_current_user, require_manage_enrollments
 from src.modules.enrollments.service import EnrollmentService
 from src.modules.users.models import User
 import slowapi
