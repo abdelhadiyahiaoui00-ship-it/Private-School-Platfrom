@@ -5,10 +5,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
+
+from src.core.limiter import limiter
 
 from src.core.config import settings
 from src.core.database import sessionmanager
@@ -32,8 +33,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
 
-# Global limiter instance — routers reference their own but app needs state
-_limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(settings.APP_NAME)
 
 async def run_migrations() -> None:
     """Run Alembic migrations in a thread so we don't block the event loop."""
@@ -171,7 +171,7 @@ def create_app() -> FastAPI:
     )
 
     # Rate limiting — must come after CORS
-    app.state.limiter = _limiter
+    app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
 

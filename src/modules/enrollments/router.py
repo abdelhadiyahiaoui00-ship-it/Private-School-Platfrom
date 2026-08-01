@@ -9,7 +9,7 @@ from src.modules.users.models import User
 import slowapi
 
 # Visitor Rate Limiting
-from src.app import limiter
+from src.core.limiter import limiter
 
 visitor_router = APIRouter(prefix="/visitor-reservations", tags=["Visitor Reservations"])
 enrollment_router = APIRouter(prefix="/enrollments", tags=["Enrollments"])
