@@ -27,13 +27,16 @@ from src.modules.modules.router import router as modules_router
 from src.modules.classes.router import router as classes_router
 from src.modules.groups.router import router as groups_router
 from src.modules.sessions.router import router as sessions_router
-from src.modules.enrollments.router import enrollment_router, visitor_router
+from src.modules.enrollments.router import (
+    router as enrollments_router,
+    visitor_router as visitor_enrollments_router,
+    parent_links_router as enrollment_parent_links_router,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(settings.APP_NAME)
 
-logger = logging.getLogger(settings.APP_NAME)
 
 async def run_migrations() -> None:
     """Run Alembic migrations in a thread so we don't block the event loop."""
@@ -189,8 +192,9 @@ def create_app() -> FastAPI:
     app.include_router(classes_router, prefix="/api")
     app.include_router(groups_router, prefix="/api")
     app.include_router(sessions_router, prefix="/api")
-    app.include_router(visitor_router, prefix="/api")
-    app.include_router(enrollment_router, prefix="/api")
+    app.include_router(visitor_enrollments_router, prefix="/api")
+    app.include_router(enrollments_router, prefix="/api")
+    app.include_router(enrollment_parent_links_router, prefix="/api")
 
     @app.get("/health")
     async def health_check():

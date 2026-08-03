@@ -112,7 +112,7 @@ async def set_group_status(
     return {"data": data}
 
 
-@router.post("/{group_id}/generate-sessions", status_code=201, summary="Generate sessions for group")
+@router.post("/{group_id}/generate-sessions", summary="Generate more sessions for a group")
 async def generate_group_sessions(
     group_id: int,
     body: GenerateSessionsRequest,

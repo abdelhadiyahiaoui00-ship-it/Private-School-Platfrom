@@ -76,14 +76,11 @@ def require_manage_users(user: User = Depends(require_role(["owner", "superAdmin
 
 
 def require_manage_enrollments(user: User = Depends(require_role(["owner", "superAdmin", "admin"]))) -> User:
-    """Owner & superAdmin always pass. Admin needs manageEnrollments flag."""
     if user.role in ("owner", "superAdmin"):
         return user
-    
     if user.role == "admin":
         perms = user.permissions or {}
-        if perms.get("manageEnrollments") or perms.get("manage_enrollments"):
+        if perms.get("manageEnrollments"):
             return user
-
     from src.core.exceptions import PermissionDenied
-    raise PermissionDenied(message="Requires manage enrollments permission.")
+    raise PermissionDenied(message="Requires manageEnrollments permission.")

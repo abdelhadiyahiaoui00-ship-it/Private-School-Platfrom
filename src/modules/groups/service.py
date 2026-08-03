@@ -7,7 +7,6 @@ from src.modules.audit.service import log_action
 from src.modules.classes.repository import ClassRepository
 from src.modules.classes.schemas import TeacherBasic
 from src.common.session_generator import generate_sessions
-from src.modules.config.service import ConfigService
 from src.modules.groups.exceptions import (
     CannotChangeSubscriptionType, GroupHasActiveDependencies,
     GroupNotFound, InvalidScheduleFormat, ScheduleRequired
@@ -75,7 +74,6 @@ class GroupService:
         self._session = session
         self._repo = GroupRepository(session)
         self._class_repo = ClassRepository(session)
-        self._config_svc = ConfigService(session)
 
     def _get_branch_scope(self, actor: User) -> Optional[list[int]]:
         if actor.role == "admin":
@@ -176,8 +174,11 @@ class GroupService:
         generated = 0
         if data.get("generate_sessions") and group.schedule:
             from_date = date.today()
-            config = await self._config_svc.get_config()
-            weeks_ahead = config.get("sessionGenerationHorizonWeeks", 8)
+            from sqlalchemy import select
+            from src.modules.config.models import SystemConfig
+            config_result = await self._session.execute(select(SystemConfig).limit(1))
+            config_obj = config_result.scalar_one_or_none()
+            weeks_ahead = config_obj.session_generation_horizon_weeks if config_obj else 8
             new_sessions, actual_until = await generate_sessions(
                 self._session, group, from_date, weeks_ahead, group.class_.period_end
             )
@@ -229,8 +230,11 @@ class GroupService:
         await self._check_branch_access(group.class_id, actor)
         
         if not weeks_ahead:
-            config = await self._config_svc.get_config()
-            weeks_ahead = config.get("sessionGenerationHorizonWeeks", 8)
+            from sqlalchemy import select
+            from src.modules.config.models import SystemConfig
+            config_result = await self._session.execute(select(SystemConfig).limit(1))
+            config_obj = config_result.scalar_one_or_none()
+            weeks_ahead = config_obj.session_generation_horizon_weeks if config_obj else 8
             
         from_date = date.today()
         if group.last_generated_until and group.last_generated_until >= from_date:
@@ -251,11 +255,9 @@ class GroupService:
             ip_address=ip,
         )
         
-        truncated = group.class_.period_end is not None and group.class_.period_end == actual_until
         return {
-            "generatedCount": len(new_sessions),
-            "generatedUntil": actual_until,
-            "truncatedByPeriodEnd": truncated,
+            "generated": len(new_sessions),
+            "until": str(actual_until),
         }
 
     async def set_status(self, group_id: int, status: str, actor: User, ip: Optional[str] = None) -> dict:
