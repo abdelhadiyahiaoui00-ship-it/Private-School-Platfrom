@@ -1,5 +1,6 @@
 from src.app import create_app
 
+# Entrypoint for FastAPI application
 app = create_app()
 
 if __name__ == "__main__":
