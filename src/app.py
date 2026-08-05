@@ -32,6 +32,8 @@ from src.modules.enrollments.router import (
     visitor_router as visitor_enrollments_router,
     parent_links_router as enrollment_parent_links_router,
 )
+from src.modules.subscriptions.router import router as subscriptions_router
+from src.modules.payments.router import router as payments_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -195,6 +197,8 @@ def create_app() -> FastAPI:
     app.include_router(visitor_enrollments_router, prefix="/api")
     app.include_router(enrollments_router, prefix="/api")
     app.include_router(enrollment_parent_links_router, prefix="/api")
+    app.include_router(subscriptions_router, prefix="/api")
+    app.include_router(payments_router, prefix="/api")
 
     @app.get("/health")
     async def health_check():

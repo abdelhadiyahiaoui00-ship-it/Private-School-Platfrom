@@ -7,6 +7,8 @@ from src.modules.sessions.schemas import GenerateSessionsRequest
 from src.modules.groups.schemas import (
     CreateGroupRequest, SetGroupStatusRequest, UpdateGroupRequest
 )
+from src.modules.subscriptions.schemas import BulkExtendRequest
+from src.modules.subscriptions.service import SubscriptionService
 from src.modules.groups.service import GroupService
 from src.modules.users.models import User
 
@@ -125,6 +127,22 @@ async def generate_group_sessions(
         ip=request.client.host if request.client else None,
     )
     return {"data": data}
+
+
+@router.post("/{group_id}/bulk-extend", summary="Bulk extend all active subscriptions in group")
+async def bulk_extend_group(
+    group_id: int,
+    body: BulkExtendRequest,
+    request: Request,
+    session: DBSessionDep,
+    actor: User = Depends(require_manage_classes),
+):
+    ip = request.client.host if request.client else None
+    sub_service = SubscriptionService(session)
+    result = await sub_service.bulk_extend_group(
+        group_id, body.model_dump(exclude_none=True), actor, ip=ip
+    )
+    return {"data": result}
 
 
 @router.delete("/{group_id}", summary="Delete group")

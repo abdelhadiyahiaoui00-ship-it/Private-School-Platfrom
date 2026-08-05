@@ -11,6 +11,8 @@ from src.modules.enrollments.schemas import (
     CreateEnrollmentRequest,
     CancelEnrollmentRequest,
 )
+from src.modules.subscriptions.schemas import ConfirmPaymentRequest
+from src.modules.subscriptions.service import SubscriptionService
 from src.modules.enrollments.service import EnrollmentService
 from src.modules.users.models import User
 
@@ -165,6 +167,22 @@ async def promote_enrollment(
     ip = request.client.host if request.client else None
     result = await service.promote_enrollment(enrollment_id, actor, ip=ip)
     return {"data": result.model_dump(by_alias=True)}
+
+
+@router.post("/{enrollment_id}/confirm-payment", summary="Confirm payment for pending enrollment")
+async def confirm_payment(
+    enrollment_id: int,
+    body: ConfirmPaymentRequest,
+    request: Request,
+    session: DBSessionDep,
+    actor: User = Depends(require_manage_enrollments),
+):
+    ip = request.client.host if request.client else None
+    sub_service = SubscriptionService(session)
+    result = await sub_service.confirm_payment_for_enrollment(
+        enrollment_id, body.model_dump(exclude_none=True), actor, ip=ip
+    )
+    return {"data": result}
 
 
 # ─── PARENT LINKS EXTENSION ───────────────────────────────────────────────────
