@@ -7,6 +7,7 @@ from fastapi import HTTPException
 import logging
 
 from src.common.financial import compute_financials, resolve_effective_commission
+from src.common.pagination import build_pagination
 from src.modules.audit.service import log_action
 from src.modules.auth.dependencies import CurrentUser
 from src.modules.users.models import User
@@ -89,17 +90,17 @@ class SubscriptionService:
             is_latest = latest_map.get(sub.enrollment_id) == sub.id
             items.append(self._map_to_response(sub, is_latest).model_dump(by_alias=True))
 
+        stats = await self.sub_repo.get_stats(branch_ids_scope=branch_ids_scope)
+
         return {
             "items": items,
-            "total": total,
-            "page": filters.get("page", 1),
-            "pageSize": filters.get("page_size", 20),
+            "pagination": build_pagination(
+                filters.get("page", 1),
+                filters.get("page_size", 20),
+                total,
+            ),
+            "stats": stats,
         }
-
-    async def get_stats(self, actor: User) -> dict:
-        branch_ids_scope = await self._get_actor_branch_scope(actor)
-        stats = await self.sub_repo.get_stats(branch_ids_scope=branch_ids_scope)
-        return stats
 
     async def renew_subscription(self, sub_id: int, payload: dict, actor: User, ip: str = None) -> dict:
         # A renewal is basically extending an existing subscription for a new period

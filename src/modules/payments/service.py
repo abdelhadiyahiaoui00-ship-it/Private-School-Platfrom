@@ -1,45 +1,113 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
-import logging
 
-from src.modules.auth.dependencies import CurrentUser
-from src.modules.users.models import User
+from src.common.pagination import build_pagination
 from src.modules.payments.models import Payment
 from src.modules.payments.repository import PaymentRepository
-from src.modules.payments.schemas import PaymentResponse
+from src.modules.payments.schemas import PaymentResponse, PaymentSummary
+from src.modules.enrollments.schemas import StudentBasic
+from src.modules.classes.schemas import TeacherBasic
+from src.modules.users.models import User
 
-logger = logging.getLogger(__name__)
+
+def _student_basic(user) -> StudentBasic:
+    if not user:
+        return StudentBasic(id=0, first_name="", last_name="", avatar_url=None, date_of_birth=None)
+    return StudentBasic(
+        id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        avatar_url=user.avatar_url,
+        date_of_birth=user.date_of_birth,
+    )
+
+
+def _teacher_basic(user) -> TeacherBasic:
+    if not user:
+        return TeacherBasic(id=0, first_name="", last_name="", avatar_url=None)
+    return TeacherBasic(
+        id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        avatar_url=user.avatar_url,
+        default_commission_percent=float(user.default_commission_percent)
+        if user.default_commission_percent is not None else None,
+    )
+
+
+async def _build_payment_response(payment: Payment, db: AsyncSession) -> PaymentResponse:
+    from src.modules.branches.models import Branch
+    from src.modules.modules.models import Module
+
+    branch_result = await db.execute(
+        select(Branch).where(Branch.id == payment.branch_id)
+    )
+    branch = branch_result.scalar_one_or_none()
+
+    module = None
+    if payment.module_id:
+        m_result = await db.execute(
+            select(Module).where(Module.id == payment.module_id)
+        )
+        module = m_result.scalar_one_or_none()
+
+    recorder_name = ""
+    if payment.recorder:
+        recorder_name = f"{payment.recorder.first_name} {payment.recorder.last_name}"
+
+    return PaymentResponse(
+        id=payment.id,
+        subscription_id=payment.subscription_id,
+        enrollment_id=payment.enrollment_id,
+        student_id=payment.student_id,
+        student=_student_basic(payment.student),
+        branch_id=payment.branch_id,
+        branch_name=branch.name if branch else "",
+        class_id=payment.class_id,
+        module_id=payment.module_id,
+        module_name=module.name if module else "",
+        teacher_id=payment.teacher_id,
+        teacher=_teacher_basic(payment.teacher),
+        amount=float(payment.amount),
+        currency=payment.currency,
+        method=payment.method,
+        commission_percent=float(payment.commission_percent),
+        commission_amount=float(payment.commission_amount),
+        net_amount=float(payment.net_amount),
+        payment_type=payment.payment_type,
+        recorded_by=payment.recorded_by,
+        recorded_by_name=recorder_name,
+        recorded_at=payment.recorded_at,
+        notes=payment.notes,
+    )
 
 
 class PaymentService:
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-        self.pay_repo = PaymentRepository(session)
+        self._session = session
+        self._repo = PaymentRepository(session)
 
-    async def get_payment(self, payment_id: int, actor: User) -> dict:
-        payment = await self.pay_repo.get_by_id(payment_id)
-        if not payment:
-            from src.core.exceptions import ResourceNotFound
-            raise ResourceNotFound(message="Payment not found")
+    def _get_branch_scope(self, actor: User) -> Optional[list[int]]:
+        if actor.role in ("owner", "superAdmin"):
+            return None
+        return [ub.branch_id for ub in (actor.branch_links or [])]
 
-        res = self._map_to_response(payment)
-        return res.model_dump(by_alias=True)
+    def _parse_date(self, value) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return value
 
     async def list_payments(self, filters: dict, actor: User) -> dict:
-        branch_ids_scope = await self._get_actor_branch_scope(actor)
-        
-        date_from = filters.get("date_from")
-        if isinstance(date_from, str):
-            date_from = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-            
-        date_to = filters.get("date_to")
-        if isinstance(date_to, str):
-            date_to = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+        branch_ids_scope = self._get_branch_scope(actor)
 
-        payments, total = await self.pay_repo.get_all(
+        payments, total = await self._repo.get_all(
             search=filters.get("search"),
             branch_id=filters.get("branch_id"),
             branch_ids_scope=branch_ids_scope,
@@ -47,86 +115,45 @@ class PaymentService:
             module_id=filters.get("module_id"),
             method=filters.get("method"),
             payment_type=filters.get("payment_type"),
-            date_from=date_from,
-            date_to=date_to,
+            date_from=self._parse_date(filters.get("date_from")),
+            date_to=self._parse_date(filters.get("date_to")),
             page=filters.get("page", 1),
             page_size=filters.get("page_size", 20),
             sort_by=filters.get("sort_by", "recorded_at"),
             sort_order=filters.get("sort_order", "desc"),
         )
-        
-        items = [self._map_to_response(p).model_dump(by_alias=True) for p in payments]
 
-        return {
-            "items": items,
-            "total": total,
-            "page": filters.get("page", 1),
-            "pageSize": filters.get("page_size", 20),
-        }
-
-    async def get_summary(self, filters: dict, actor: User) -> dict:
-        branch_ids_scope = await self._get_actor_branch_scope(actor)
-        
-        date_from = filters.get("date_from")
-        if isinstance(date_from, str):
-            date_from = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-            
-        date_to = filters.get("date_to")
-        if isinstance(date_to, str):
-            date_to = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
-            
-        summary = await self.pay_repo.get_summary(
+        # Summary uses same filters — no separate endpoint
+        summary = await self._repo.get_summary(
             branch_ids_scope=branch_ids_scope,
             branch_id=filters.get("branch_id"),
             teacher_id=filters.get("teacher_id"),
             module_id=filters.get("module_id"),
             method=filters.get("method"),
             payment_type=filters.get("payment_type"),
-            date_from=date_from,
-            date_to=date_to,
+            date_from=self._parse_date(filters.get("date_from")),
+            date_to=self._parse_date(filters.get("date_to")),
         )
-        return summary
 
-    async def _get_actor_branch_scope(self, actor: User) -> Optional[list[int]]:
-        if actor.role in ("owner", "superAdmin"):
-            return None
-        return [b.branch_id for b in actor.branches]
+        items = []
+        for p in payments:
+            items.append(
+                (await _build_payment_response(p, self._session)).model_dump(by_alias=True)
+            )
 
-    def _map_to_response(self, payment: Payment) -> PaymentResponse:
-        return PaymentResponse(
-            id=payment.id,
-            subscription_id=payment.subscription_id,
-            enrollment_id=payment.enrollment_id,
-            student_id=payment.student_id,
-            student={
-                "id": payment.student.id if payment.student else payment.student_id,
-                "first_name": payment.student.first_name if payment.student else "",
-                "last_name": payment.student.last_name if payment.student else "",
-                "avatar_url": payment.student.avatar_url if payment.student else None,
-                "date_of_birth": payment.student.date_of_birth if payment.student else None,
-            },
-            branch_id=payment.branch_id,
-            branch_name="Branch",  # In a full impl, we'd join branch or cache it
-            class_id=payment.class_id,
-            module_id=payment.module_id,
-            module_name="Module",  # Similarly, would need a join if strictly required
-            teacher_id=payment.teacher_id,
-            teacher={
-                "id": payment.teacher.id if payment.teacher else 0,
-                "first_name": payment.teacher.first_name if payment.teacher else "",
-                "last_name": payment.teacher.last_name if payment.teacher else "",
-                "avatar_url": payment.teacher.avatar_url if payment.teacher else None,
-                "default_commission_percent": payment.teacher.default_commission_percent if payment.teacher else None,
-            } if payment.teacher else None,
-            amount=payment.amount,
-            currency=payment.currency,
-            method=payment.method,
-            commission_percent=payment.commission_percent,
-            commission_amount=payment.commission_amount,
-            net_amount=payment.net_amount,
-            payment_type=payment.payment_type,
-            recorded_by=payment.recorded_by,
-            recorded_by_name=f"{payment.recorder.first_name} {payment.recorder.last_name}" if payment.recorder else "",
-            recorded_at=payment.recorded_at,
-            notes=payment.notes,
-        )
+        return {
+            "items": items,
+            "pagination": build_pagination(
+                filters.get("page", 1),
+                filters.get("page_size", 20),
+                total,
+            ),
+            "summary": PaymentSummary(**summary).model_dump(by_alias=True),
+        }
+
+    async def get_payment(self, payment_id: int, actor: User) -> dict:
+        payment = await self._repo.get_by_id(payment_id)
+        if not payment:
+            from src.core.exceptions import ResourceNotFound
+            raise ResourceNotFound(message="Payment not found.")
+        return (await _build_payment_response(payment, self._session)).model_dump(by_alias=True)

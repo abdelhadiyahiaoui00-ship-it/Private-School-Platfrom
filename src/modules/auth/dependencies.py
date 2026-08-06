@@ -84,3 +84,16 @@ def require_manage_enrollments(user: User = Depends(require_role(["owner", "supe
             return user
     from src.core.exceptions import PermissionDenied
     raise PermissionDenied(message="Requires manageEnrollments permission.")
+
+
+def require_manage_subscriptions(
+    user: User = Depends(require_role(["owner", "superAdmin", "admin"]))
+) -> User:
+    if user.role in ("owner", "superAdmin"):
+        return user
+    if user.role == "admin":
+        perms = user.permissions or {}
+        if perms.get("manageSubscriptions"):
+            return user
+    from src.core.exceptions import PermissionDenied
+    raise PermissionDenied(message="Requires manageSubscriptions permission.")

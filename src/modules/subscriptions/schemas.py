@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from src.modules.enrollments.schemas import StudentBasic
 from src.modules.classes.schemas import TeacherBasic
+from src.modules.payments.schemas import PaymentResponse
 
 
 class ExtensionLogEntry(BaseModel):
@@ -60,7 +61,7 @@ class SubscriptionResponse(BaseModel):
 
 
 class SubscriptionDetailResponse(SubscriptionResponse):
-    payment: "PaymentResponse"
+    payment: Optional[PaymentResponse] = None
     enrollment_source: str   # 'self'|'parent'|'admin'|'visitor_form'
 
 
@@ -113,7 +114,4 @@ class CancelSubscriptionRequest(BaseModel):
     reason: Optional[str] = None
 
 
-# Forward reference needed because PaymentResponse is defined in payments/schemas.py
-# SubscriptionDetailResponse.payment uses it but we import it lazily there
-from src.modules.payments.schemas import PaymentResponse  # noqa: E402
-SubscriptionDetailResponse.model_rebuild()
+
