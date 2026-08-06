@@ -129,8 +129,19 @@ async def generate_group_sessions(
     return {"data": data}
 
 
-@router.post("/{group_id}/bulk-extend", summary="Bulk extend all active subscriptions in group")
-async def bulk_extend_group(
+@router.get("/{group_id}/extend-subscriptions/preview", summary="Preview bulk extend for group")
+async def get_extend_subscriptions_preview(
+    group_id: int,
+    session: DBSessionDep,
+    actor: User = Depends(require_manage_classes),
+):
+    sub_service = SubscriptionService(session)
+    result = await sub_service.get_bulk_extend_preview(group_id, actor)
+    return {"data": result}
+
+
+@router.post("/{group_id}/extend-subscriptions", summary="Bulk extend all active subscriptions in group")
+async def extend_subscriptions(
     group_id: int,
     body: BulkExtendRequest,
     request: Request,
@@ -139,7 +150,7 @@ async def bulk_extend_group(
 ):
     ip = request.client.host if request.client else None
     sub_service = SubscriptionService(session)
-    result = await sub_service.bulk_extend_group(
+    result = await sub_service.apply_bulk_extend(
         group_id, body.model_dump(exclude_none=True), actor, ip=ip
     )
     return {"data": result}

@@ -294,7 +294,20 @@ class SubscriptionService:
         res = self._map_to_response(sub, is_latest)
         return res.model_dump(by_alias=True)
 
-    async def bulk_extend_group(self, group_id: int, payload: dict, actor: User, ip: str = None) -> dict:
+    async def get_bulk_extend_preview(self, group_id: int, actor: User) -> dict:
+        subs = await self.sub_repo.get_active_for_group(group_id)
+        if not subs:
+            return {"activeCount": 0, "monthlyCount": 0, "sessionBasedCount": 0}
+            
+        monthly = sum(1 for s in subs if s.type == "monthly")
+        session_based = sum(1 for s in subs if s.type == "session_based")
+        return {
+            "activeCount": len(subs),
+            "monthlyCount": monthly,
+            "sessionBasedCount": session_based
+        }
+
+    async def apply_bulk_extend(self, group_id: int, payload: dict, actor: User, ip: str = None) -> dict:
         subs = await self.sub_repo.get_active_for_group(group_id)
         if not subs:
             raise NoActiveSubscriptionsToExtend()
