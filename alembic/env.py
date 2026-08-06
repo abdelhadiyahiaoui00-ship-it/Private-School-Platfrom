@@ -19,6 +19,8 @@ from src.modules.classes.models import Class
 from src.modules.groups.models import Group
 from src.modules.sessions.models import Session
 from src.modules.enrollments.models import Enrollment
+from src.modules.subscriptions.models import Subscription
+from src.modules.payments.models import Payment
 
 config = context.config
 
