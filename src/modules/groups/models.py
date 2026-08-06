@@ -28,5 +28,5 @@ class Group(BaseModel):
     last_generated_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     # Relationships
-    class_ = relationship("src.modules.classes.models.Class", lazy="selectin")
+    class_ = relationship("Class", lazy="selectin")
     teacher = relationship("User", lazy="selectin", foreign_keys=[teacher_id])

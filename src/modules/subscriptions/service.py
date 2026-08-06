@@ -137,7 +137,7 @@ class SubscriptionService:
         duration_days = payload.get("duration_days")
         total_sessions = payload.get("total_sessions")
         
-        sub_type = "monthly" if not group or group.type == "monthly" else "session_based"
+        sub_type = "monthly" if not group or group.subscription_type == "monthly" else "session_based"
         end_date = None
         rem_sessions = None
 
@@ -434,7 +434,7 @@ class SubscriptionService:
         duration_days = payload.get("duration_days")
         total_sessions = payload.get("total_sessions")
         
-        sub_type = "monthly" if not group or group.type == "monthly" else "session_based"
+        sub_type = "monthly" if not group or group.subscription_type == "monthly" else "session_based"
         end_date = None
         rem_sessions = None
 

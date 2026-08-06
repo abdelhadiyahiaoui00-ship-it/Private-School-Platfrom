@@ -45,7 +45,6 @@ class Class(BaseModel):
     )
 
     # Relationships
-    # Relationships
-    branch = relationship("src.modules.branches.models.Branch", lazy="selectin")
-    module = relationship("src.modules.modules.models.Module", lazy="selectin")
-    teacher = relationship("src.modules.users.models.User", lazy="selectin", foreign_keys=[teacher_id])
+    branch = relationship("Branch", lazy="selectin")
+    module = relationship("Module", lazy="selectin")
+    teacher = relationship("User", lazy="selectin", foreign_keys=[teacher_id])
