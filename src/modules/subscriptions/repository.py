@@ -23,7 +23,8 @@ class SubscriptionRepository:
             .options(
                 selectinload(Subscription.student),
                 selectinload(Subscription.teacher),
-                selectinload(Subscription.group),
+                selectinload(Subscription.branch),
+                selectinload(Subscription.group).selectinload(Group.class_).selectinload(Class.module),
                 selectinload(Subscription.payment)
                     .selectinload(Payment.student),
                 selectinload(Subscription.payment)
@@ -70,7 +71,8 @@ class SubscriptionRepository:
             .options(
                 selectinload(Subscription.student),
                 selectinload(Subscription.teacher),
-                selectinload(Subscription.group),
+                selectinload(Subscription.branch),
+                selectinload(Subscription.group).selectinload(Group.class_).selectinload(Class.module),
                 selectinload(Subscription.payment),
             )
         )

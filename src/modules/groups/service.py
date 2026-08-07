@@ -238,7 +238,8 @@ class GroupService:
             
         from_date = date.today()
         if group.last_generated_until and group.last_generated_until > from_date:
-            from_date = group.last_generated_until
+            from datetime import timedelta
+            from_date = group.last_generated_until + timedelta(days=1)
             
         new_sessions, actual_until = await generate_sessions(
             self._session, group, from_date, weeks_ahead, group.class_.period_end

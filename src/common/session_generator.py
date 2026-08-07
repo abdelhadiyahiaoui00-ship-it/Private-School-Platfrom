@@ -56,10 +56,11 @@ async def generate_sessions(
         schedule_day = (weekday + 1) % 7
 
         for slot in schedule:
-            slot_day = slot.get("dayOfWeek")
+            slot_day = slot.get("dayOfWeek") if "dayOfWeek" in slot else slot.get("day_of_week")
             if slot_day != schedule_day:
                 continue
-            start_time_str = slot.get("startTime", "")[:5]
+            start_time_str = (slot.get("startTime") or slot.get("start_time") or "")[:5]
+            end_time_str = (slot.get("endTime") or slot.get("end_time") or "")[:5]
             if (current, start_time_str) in existing_set:
                 continue
             existing_set.add((current, start_time_str))  # prevent double-add in same run
@@ -83,7 +84,7 @@ async def generate_sessions(
                 branch_id=branch_id,
                 session_date=current,
                 start_time=start_time_str,
-                end_time=slot.get("endTime", "")[:5],
+                end_time=end_time_str,
                 room=group.room,
                 status="scheduled",
             )

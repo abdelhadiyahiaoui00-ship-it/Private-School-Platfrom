@@ -60,6 +60,7 @@ class Subscription(BaseModel):
     student = relationship("User", foreign_keys=[student_id], lazy="selectin")
     teacher = relationship("User", foreign_keys=[teacher_id], lazy="selectin")
     group = relationship("Group", lazy="selectin")
+    branch = relationship("Branch", lazy="selectin")
     payment = relationship(
         "Payment",
         back_populates="subscription",

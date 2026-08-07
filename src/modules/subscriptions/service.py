@@ -523,7 +523,7 @@ class SubscriptionService:
     async def _get_actor_branch_scope(self, actor: User) -> Optional[list[int]]:
         if actor.role in ("owner", "superAdmin"):
             return None
-        return [b.branch_id for b in actor.branches]
+        return [b.branch_id for b in getattr(actor, "branch_links", [])]
 
     def _map_to_response(self, sub: Subscription, is_latest: bool) -> SubscriptionResponse:
         today = date.today()
@@ -554,7 +554,7 @@ class SubscriptionService:
             module_id=sub.module_id or 0,
             module_name=sub.group.class_.module.name if sub.group and sub.group.class_ and sub.group.class_.module else "",
             branch_id=sub.branch_id,
-            branch_name=sub.group.branch.name if sub.group and sub.group.branch else "",
+            branch_name=sub.branch.name if getattr(sub, "branch", None) else "",
             teacher_id=sub.teacher_id or 0,
             teacher={
                 "id": sub.teacher.id if sub.teacher else 0,
