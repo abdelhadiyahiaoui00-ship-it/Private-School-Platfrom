@@ -452,10 +452,10 @@ class SubscriptionService:
                 total_sessions = group.session_count if group else 4
             rem_sessions = total_sessions
 
-        # Create Subscription
+        student_id = enroll.student_id or payload.get("student_id") or enroll.enrolled_by or actor.id
         sub = Subscription(
             enrollment_id=enroll.id,
-            student_id=enroll.student_id,
+            student_id=student_id,
             group_id=enroll.group_id,
             branch_id=enroll.branch_id,
             teacher_id=teacher_id,
@@ -479,7 +479,7 @@ class SubscriptionService:
         payment = Payment(
             subscription_id=sub.id,
             enrollment_id=enroll.id,
-            student_id=enroll.student_id,
+            student_id=student_id,
             branch_id=enroll.branch_id,
             class_id=cls.id if cls else None,
             module_id=module_id,

@@ -79,12 +79,16 @@ async def generate_sessions(
                 cls_obj = cls_result.scalar_one_or_none()
                 branch_id = cls_obj.branch_id if cls_obj else 0
 
+            from datetime import time as dt_time
+            st_obj = dt_time.fromisoformat(start_time_str) if start_time_str else dt_time(0, 0)
+            et_obj = dt_time.fromisoformat(end_time_str) if end_time_str else dt_time(0, 0)
+
             s = Session(
                 group_id=group.id,
                 branch_id=branch_id,
                 session_date=current,
-                start_time=start_time_str,
-                end_time=end_time_str,
+                start_time=st_obj,
+                end_time=et_obj,
                 room=group.room,
                 status="scheduled",
             )
