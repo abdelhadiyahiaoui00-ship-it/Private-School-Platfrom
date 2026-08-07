@@ -31,8 +31,6 @@ class SessionResponse(BaseModel):
 
 class GenerateSessionsRequest(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-    group_id: int
-    from_date: date
     weeks_ahead: Optional[int] = None
 
 

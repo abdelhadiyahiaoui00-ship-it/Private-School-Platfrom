@@ -237,9 +237,8 @@ class GroupService:
             weeks_ahead = config_obj.session_generation_horizon_weeks if config_obj else 8
             
         from_date = date.today()
-        if group.last_generated_until and group.last_generated_until >= from_date:
-            from datetime import timedelta
-            from_date = group.last_generated_until + timedelta(days=1)
+        if group.last_generated_until and group.last_generated_until > from_date:
+            from_date = group.last_generated_until
             
         new_sessions, actual_until = await generate_sessions(
             self._session, group, from_date, weeks_ahead, group.class_.period_end
