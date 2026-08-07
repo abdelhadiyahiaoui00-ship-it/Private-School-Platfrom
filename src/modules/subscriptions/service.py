@@ -370,7 +370,7 @@ class SubscriptionService:
 
         return {"extendedCount": extended_count}
 
-    async def cancel_subscription(self, sub_id: int, payload: dict, actor: User, ip: str = None) -> dict:
+    async def cancel_subscription(self, sub_id: int, actor: User, reason: Optional[str] = None, ip: Optional[str] = None) -> dict:
         sub = await self.sub_repo.get_by_id(sub_id)
         if not sub:
             raise SubscriptionNotFound()
@@ -380,7 +380,7 @@ class SubscriptionService:
             
         sub.status = "cancelled"
         sub.cancelled_at = datetime.now(timezone.utc)
-        sub.cancelled_reason = payload.get("reason")
+        sub.cancelled_reason = reason
         
         sub = await self.sub_repo.save(sub)
 
