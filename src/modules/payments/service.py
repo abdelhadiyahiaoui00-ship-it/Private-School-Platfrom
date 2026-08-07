@@ -41,6 +41,9 @@ def _teacher_basic(user) -> TeacherBasic:
 async def _build_payment_response(payment: Payment, db: AsyncSession) -> PaymentResponse:
     from src.modules.branches.models import Branch
     from src.modules.modules.models import Module
+    from src.modules.classes.models import Class
+    from src.modules.groups.models import Group
+    from src.modules.subscriptions.models import Subscription
 
     branch_result = await db.execute(
         select(Branch).where(Branch.id == payment.branch_id)
@@ -54,6 +57,32 @@ async def _build_payment_response(payment: Payment, db: AsyncSession) -> Payment
         )
         module = m_result.scalar_one_or_none()
 
+    cls = None
+    if payment.class_id:
+        c_result = await db.execute(
+            select(Class).where(Class.id == payment.class_id)
+        )
+        cls = c_result.scalar_one_or_none()
+
+    group_name = ""
+    if payment.subscription_id:
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.id == payment.subscription_id)
+        )
+        sub = sub_result.scalar_one_or_none()
+        if sub and sub.group_id:
+            g_result = await db.execute(
+                select(Group).where(Group.id == sub.group_id)
+            )
+            grp = g_result.scalar_one_or_none()
+            if grp:
+                group_name = grp.name
+                if not cls and grp.class_id:
+                    c_result = await db.execute(
+                        select(Class).where(Class.id == grp.class_id)
+                    )
+                    cls = c_result.scalar_one_or_none()
+
     recorder_name = ""
     if payment.recorder:
         recorder_name = f"{payment.recorder.first_name} {payment.recorder.last_name}"
@@ -66,9 +95,11 @@ async def _build_payment_response(payment: Payment, db: AsyncSession) -> Payment
         student=_student_basic(payment.student),
         branch_id=payment.branch_id,
         branch_name=branch.name if branch else "",
-        class_id=payment.class_id,
+        class_id=payment.class_id or (cls.id if cls else None),
         module_id=payment.module_id,
         module_name=module.name if module else "",
+        class_name=cls.name if cls else "",
+        group_name=group_name,
         teacher_id=payment.teacher_id,
         teacher=_teacher_basic(payment.teacher),
         amount=float(payment.amount),

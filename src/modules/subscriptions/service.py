@@ -599,6 +599,8 @@ class SubscriptionService:
                 class_id=sub.payment.class_id,
                 module_id=sub.payment.module_id,
                 module_name=base.module_name,
+                class_name=base.class_name,
+                group_name=base.group_name,
                 teacher_id=sub.payment.teacher_id,
                 teacher=base.teacher,
                 amount=sub.payment.amount,

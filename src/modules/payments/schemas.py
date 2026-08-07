@@ -18,6 +18,8 @@ class PaymentResponse(BaseModel):
     class_id: Optional[int] = None
     module_id: Optional[int] = None
     module_name: str
+    class_name: str
+    group_name: str
     teacher_id: Optional[int] = None
     teacher: TeacherBasic
     amount: float
