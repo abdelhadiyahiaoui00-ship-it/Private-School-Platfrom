@@ -40,14 +40,7 @@ class PaymentRepository:
         sort_by: str = "recorded_at",
         sort_order: str = "desc",
     ) -> tuple[list[Payment], int]:
-        q = (
-            select(Payment)
-            .options(
-                selectinload(Payment.student),
-                selectinload(Payment.teacher),
-                selectinload(Payment.recorder),
-            )
-        )
+        q = select(Payment)
 
         if branch_ids_scope is not None:
             q = q.where(Payment.branch_id.in_(branch_ids_scope))
@@ -74,7 +67,14 @@ class PaymentRepository:
         count_q = select(func.count()).select_from(q.subquery())
         total = (await self._session.execute(count_q)).scalar_one()
 
-        sort_col = Payment.recorded_at if sort_by == "recorded_at" else Payment.amount
+        # Apply eager loading after count
+        q = q.options(
+            selectinload(Payment.student),
+            selectinload(Payment.teacher),
+            selectinload(Payment.recorder),
+        )
+
+        sort_col = Payment.recorded_at if sort_by in ["recorded_at", "recordedAt"] else Payment.amount
         q = q.order_by(sort_col.desc() if sort_order == "desc" else sort_col.asc())
         q = q.offset((page - 1) * page_size).limit(page_size)
 

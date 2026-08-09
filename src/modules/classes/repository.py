@@ -134,6 +134,13 @@ class ClassRepository:
                 stats["archived"] = cnt
         return stats
 
+    async def count_active_for_branch(self, branch_id: int) -> int:
+        q = select(func.count()).select_from(Class).where(
+            Class.branch_id == branch_id,
+            Class.status == "active"
+        )
+        return (await self._session.execute(q)).scalar_one()
+
     async def create(self, cls: Class) -> Class:
         self._session.add(cls)
         await self._session.flush()

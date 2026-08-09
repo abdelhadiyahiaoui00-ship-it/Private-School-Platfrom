@@ -63,9 +63,18 @@ class BranchService:
         stats = await self._repo.get_stats()
         pagination = build_pagination(page, page_size, total)
         items = []
+        
+        from src.modules.classes.repository import ClassRepository
+        class_repo = ClassRepository(self._session)
+        
         for b in branches:
             users_count = await self._repo.get_total_users_count(b.id)
-            items.append(_build_branch_response(b, users_count))
+            active_classes = await class_repo.count_active_for_branch(b.id)
+            
+            resp = _build_branch_response(b, users_count)
+            resp.active_classes_count = active_classes
+            items.append(resp)
+            
         return {"items": items, "pagination": pagination, "stats": stats}
 
     async def get_my_branches(self, actor: User) -> list:
@@ -80,7 +89,13 @@ class BranchService:
         if not branch:
             raise BranchNotFound()
         users_count = await self._repo.get_total_users_count(branch_id)
-        return _build_branch_response(branch, users_count)
+        
+        from src.modules.classes.repository import ClassRepository
+        active_classes = await ClassRepository(self._session).count_active_for_branch(branch_id)
+        
+        resp = _build_branch_response(branch, users_count)
+        resp.active_classes_count = active_classes
+        return resp
 
     async def create_branch(self, data: dict, actor: User, ip: Optional[str] = None) -> BranchResponse:
         name = data["name"].strip()

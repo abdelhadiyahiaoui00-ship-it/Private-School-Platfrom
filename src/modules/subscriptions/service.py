@@ -384,6 +384,17 @@ class SubscriptionService:
         
         sub = await self.sub_repo.save(sub)
 
+        # Cancel enrollment and free up seat
+        enroll = await self.enroll_repo.get_by_id(sub.enrollment_id)
+        if enroll and enroll.status == "active":
+            enroll.status = "cancelled"
+            enroll.cancelled_at = datetime.now(timezone.utc)
+            enroll.cancelled_reason = reason
+            await self.enroll_repo.save(enroll)
+
+            from src.common.enrollment_engine import promote_next_in_waitlist
+            await promote_next_in_waitlist(self.session, sub.group_id, actor.id if actor else None)
+
         await log_action(
             session=self.session,
             user_id=actor.id,

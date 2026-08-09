@@ -110,9 +110,13 @@ class SessionService:
         rooms = set()
         groups = {}
         for s in sessions:
-            if s.group_ and s.group_.teacher:
-                t = s.group_.teacher
-                teachers[t.id] = f"{t.first_name} {t.last_name}"
+            teacher = None
+            if s.group_:
+                teacher = s.group_.teacher
+                if not teacher and s.group_.class_ and s.group_.class_.teacher:
+                    teacher = s.group_.class_.teacher
+            if teacher:
+                teachers[teacher.id] = f"{teacher.first_name} {teacher.last_name}"
             if s.room:
                 rooms.add(s.room)
             if s.group_:

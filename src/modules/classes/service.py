@@ -23,9 +23,10 @@ def _format_schedule_summary(schedule: list) -> str:
     day_names = {0: "أحد", 1: "اثن", 2: "ثلث", 3: "أرب", 4: "خمس", 5: "جمع", 6: "سبت"}
     parts = []
     for slot in schedule:
-        day = day_names.get(slot.get("dayOfWeek", 0), "")
-        start = slot.get("startTime", "")[:5]
-        end = slot.get("endTime", "")[:5]
+        day_val = slot.get("day_of_week", slot.get("dayOfWeek", 0))
+        day = day_names.get(day_val, "")
+        start = slot.get("start_time", slot.get("startTime", ""))[:5]
+        end = slot.get("end_time", slot.get("endTime", ""))[:5]
         parts.append(f"{day} {start}–{end}")
     return "، ".join(parts)
 
