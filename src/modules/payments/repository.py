@@ -72,6 +72,10 @@ class PaymentRepository:
             selectinload(Payment.student),
             selectinload(Payment.teacher),
             selectinload(Payment.recorder),
+            selectinload(Payment.subscription),
+            selectinload(Payment.branch),
+            selectinload(Payment.class_),
+            selectinload(Payment.module),
         )
 
         sort_col = Payment.recorded_at if sort_by in ["recorded_at", "recordedAt"] else Payment.amount

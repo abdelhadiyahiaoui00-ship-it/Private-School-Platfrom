@@ -527,9 +527,44 @@ class SubscriptionService:
             ip_address=ip,
         )
 
-        res = self._map_to_detail_response(sub, is_latest=True, enroll_source=enroll.source)
-        return {"subscription": res.model_dump(by_alias=True)}
+        from src.modules.enrollments.service import _build_enrollment_response
+        enroll_res = _build_enrollment_response(enroll)
+        sub_res = self._map_to_response(sub, is_latest=True)
+        
+        from src.modules.payments.schemas import PaymentResponse
+        payment_res = PaymentResponse(
+            id=payment.id,
+            subscription_id=sub.id,
+            enrollment_id=enroll.id,
+            student_id=payment.student_id,
+            student=sub_res.student,
+            branch_id=payment.branch_id,
+            branch_name=sub_res.branch_name,
+            class_id=payment.class_id,
+            module_id=payment.module_id,
+            module_name=sub_res.module_name,
+            class_name=sub_res.class_name,
+            group_name=sub_res.group_name,
+            teacher_id=payment.teacher_id,
+            teacher=sub_res.teacher,
+            amount=payment.amount,
+            currency=payment.currency,
+            method=payment.method,
+            commission_percent=payment.commission_percent,
+            commission_amount=payment.commission_amount,
+            net_amount=payment.net_amount,
+            payment_type=payment.payment_type,
+            recorded_by=payment.recorded_by,
+            recorded_by_name=f"{actor.first_name} {actor.last_name}",
+            recorded_at=payment.recorded_at,
+            notes=payment.notes,
+        )
 
+        return {
+            "enrollment": enroll_res.model_dump(by_alias=True),
+            "subscription": sub_res.model_dump(by_alias=True),
+            "payment": payment_res.model_dump(by_alias=True),
+        }
 
     async def _get_actor_branch_scope(self, actor: User) -> Optional[list[int]]:
         if actor.role in ("owner", "superAdmin"):

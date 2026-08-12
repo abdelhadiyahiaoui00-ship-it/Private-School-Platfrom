@@ -39,49 +39,16 @@ def _teacher_basic(user) -> TeacherBasic:
 
 
 async def _build_payment_response(payment: Payment, db: AsyncSession) -> PaymentResponse:
-    from src.modules.branches.models import Branch
-    from src.modules.modules.models import Module
-    from src.modules.classes.models import Class
-    from src.modules.groups.models import Group
-    from src.modules.subscriptions.models import Subscription
-
-    branch_result = await db.execute(
-        select(Branch).where(Branch.id == payment.branch_id)
-    )
-    branch = branch_result.scalar_one_or_none()
-
-    module = None
-    if payment.module_id:
-        m_result = await db.execute(
-            select(Module).where(Module.id == payment.module_id)
-        )
-        module = m_result.scalar_one_or_none()
-
-    cls = None
-    if payment.class_id:
-        c_result = await db.execute(
-            select(Class).where(Class.id == payment.class_id)
-        )
-        cls = c_result.scalar_one_or_none()
-
+    branch = payment.branch
+    module = payment.module
+    cls = payment.class_
+    
     group_name = ""
-    if payment.subscription_id:
-        sub_result = await db.execute(
-            select(Subscription).where(Subscription.id == payment.subscription_id)
-        )
-        sub = sub_result.scalar_one_or_none()
-        if sub and sub.group_id:
-            g_result = await db.execute(
-                select(Group).where(Group.id == sub.group_id)
-            )
-            grp = g_result.scalar_one_or_none()
-            if grp:
-                group_name = grp.name
-                if not cls and grp.class_id:
-                    c_result = await db.execute(
-                        select(Class).where(Class.id == grp.class_id)
-                    )
-                    cls = c_result.scalar_one_or_none()
+    sub = payment.subscription
+    if sub and sub.group:
+        group_name = sub.group.name
+        if not cls and sub.group.class_:
+            cls = sub.group.class_
 
     recorder_name = ""
     if payment.recorder:

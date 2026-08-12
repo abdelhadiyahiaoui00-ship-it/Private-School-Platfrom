@@ -22,6 +22,7 @@ class SessionRepository:
                 selectinload(Session.group_).selectinload(Group.class_).selectinload(Class.module),
                 selectinload(Session.group_).selectinload(Group.teacher),
                 selectinload(Session.group_).selectinload(Group.class_).selectinload(Class.teacher),
+                selectinload(Session.branch),
             )
         )
         return result.scalar_one_or_none()
@@ -47,6 +48,7 @@ class SessionRepository:
             selectinload(Session.group_).selectinload(Group.class_).selectinload(Class.module),
             selectinload(Session.group_).selectinload(Group.teacher),
             selectinload(Session.group_).selectinload(Group.class_).selectinload(Class.teacher),
+            selectinload(Session.branch),
         )
 
         # Effective branch filter — branchId wins; then branchIds; then scope default

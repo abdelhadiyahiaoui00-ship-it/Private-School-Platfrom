@@ -15,6 +15,7 @@ class SessionResponse(BaseModel):
     class_name: str
     module_name: str
     branch_id: int
+    branch_name: str
     teacher: Optional[TeacherBasic] = None
     session_date: date
     start_time: time

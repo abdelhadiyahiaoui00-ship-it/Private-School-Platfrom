@@ -48,7 +48,10 @@ class Payment(BaseModel):
     )
 
     # Relationships
-    subscription = relationship("Subscription", back_populates="payment")
+    subscription = relationship("Subscription", back_populates="payment", lazy="selectin")
     student = relationship("User", foreign_keys=[student_id], lazy="selectin")
     teacher = relationship("User", foreign_keys=[teacher_id], lazy="selectin")
     recorder = relationship("User", foreign_keys=[recorded_by], lazy="selectin")
+    branch = relationship("Branch", foreign_keys=[branch_id], lazy="selectin")
+    class_ = relationship("Class", foreign_keys=[class_id], lazy="selectin")
+    module = relationship("Module", foreign_keys=[module_id], lazy="selectin")

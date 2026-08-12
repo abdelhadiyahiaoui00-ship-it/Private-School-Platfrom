@@ -44,6 +44,7 @@ def _build_response(sess: Session) -> SessionResponse:
         class_name=cls.name if cls else "",
         module_name=mod.name if mod else "",
         branch_id=sess.branch_id,
+        branch_name=sess.branch.name if sess.branch else "",
         teacher=_build_teacher(teacher),
         session_date=sess.session_date,
         start_time=sess.start_time,

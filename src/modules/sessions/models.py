@@ -33,3 +33,4 @@ class Session(BaseModel):
 
     # Relationships
     group_ = relationship("Group", lazy="selectin")
+    branch = relationship("Branch", lazy="selectin")
