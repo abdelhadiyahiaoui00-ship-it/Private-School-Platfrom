@@ -527,8 +527,9 @@ class SubscriptionService:
             ip_address=ip,
         )
 
-        from src.modules.enrollments.service import _build_enrollment_response
-        enroll_res = _build_enrollment_response(enroll)
+        from src.modules.enrollments.service import _build_enrollment_response, _get_hold_hours
+        hold_hours = await _get_hold_hours(self.session)
+        enroll_res = await _build_enrollment_response(enroll, self.session, hold_hours)
         sub_res = self._map_to_response(sub, is_latest=True)
         
         from src.modules.payments.schemas import PaymentResponse
