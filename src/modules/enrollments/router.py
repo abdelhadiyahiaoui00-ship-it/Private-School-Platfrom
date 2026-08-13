@@ -48,7 +48,7 @@ async def list_visitor_requests(
     branch_id: Optional[int] = Query(None, alias="branchId"),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
 ):
     result = await service.list_visitor_requests({
         "status": status, "branch_id": branch_id,
@@ -109,7 +109,7 @@ async def list_enrollments(
     source: Optional[str] = Query(None),
     overdue_only: bool = Query(False, alias="overdueOnly"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
     sort_by: str = Query("createdAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
 ):

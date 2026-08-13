@@ -13,7 +13,7 @@ async def get_notifications(
     actor: CurrentUser,
     session: DBSessionDep,
     unread: bool = Query(False),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=1000),
     page: int = Query(1, ge=1),
 ):
     repo = NotificationRepository(session)

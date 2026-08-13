@@ -33,7 +33,7 @@ async def list_subscriptions(
     expiring_soon_only: bool = Query(False, alias="expiringSoonOnly"),
     expired_only: bool = Query(False, alias="expiredOnly"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
     sort_by: str = Query("createdAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
 ):

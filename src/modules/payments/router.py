@@ -27,7 +27,7 @@ async def list_payments(
     date_from: Optional[str] = Query(None, alias="dateFrom"),
     date_to: Optional[str] = Query(None, alias="dateTo"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
     sort_by: str = Query("recordedAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
 ):

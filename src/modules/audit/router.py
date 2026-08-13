@@ -31,7 +31,7 @@ async def get_my_logs(
     actor: CurrentUser,
     session: DBSessionDep,
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=1000),
     category: Optional[str] = Query(None),
 ):
     from sqlalchemy import func

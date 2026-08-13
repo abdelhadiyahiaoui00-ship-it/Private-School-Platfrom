@@ -44,7 +44,7 @@ async def list_sessions(
     date_to: date = Query(..., alias="dateTo"),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
 ):
     parsed_branch_ids: Optional[list[int]] = None
     if branch_ids_raw and not branch_id:

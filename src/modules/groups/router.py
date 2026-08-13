@@ -41,7 +41,7 @@ async def list_groups(
     has_availability: Optional[bool] = Query(None, alias="hasAvailability"),
     exclude_group_id: Optional[int] = Query(None, alias="excludeGroupId"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
 ):
     parsed_branch_ids: Optional[list[int]] = None
     if branch_ids_raw and not branch_id:
