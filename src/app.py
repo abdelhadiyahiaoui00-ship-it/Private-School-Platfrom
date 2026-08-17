@@ -27,6 +27,12 @@ from src.modules.modules.router import router as modules_router
 from src.modules.classes.router import router as classes_router
 from src.modules.groups.router import router as groups_router
 from src.modules.sessions.router import router as sessions_router
+from src.modules.attendance.router import (
+    attendance_router,
+    group_attendance_router,
+    reschedule_router,
+    reschedule_session_router,
+)
 from src.modules.enrollments.router import (
     router as enrollments_router,
     visitor_router as visitor_enrollments_router,
@@ -194,6 +200,10 @@ def create_app() -> FastAPI:
     app.include_router(classes_router, prefix="/api")
     app.include_router(groups_router, prefix="/api")
     app.include_router(sessions_router, prefix="/api")
+    app.include_router(attendance_router, prefix="/api")
+    app.include_router(reschedule_session_router, prefix="/api")
+    app.include_router(reschedule_router, prefix="/api")
+    app.include_router(group_attendance_router, prefix="/api")
     app.include_router(visitor_enrollments_router, prefix="/api")
     app.include_router(enrollments_router, prefix="/api")
     app.include_router(enrollment_parent_links_router, prefix="/api")

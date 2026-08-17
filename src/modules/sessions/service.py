@@ -72,6 +72,40 @@ class SessionService:
             return [ub.branch_id for ub in (actor.branch_links or [])]
         return None
 
+    async def _is_teacher_session(self, sess: Session, actor: User) -> bool:
+        if actor.role != "teacher":
+            return False
+        group = sess.group_
+        if not group:
+            group_result = await self._session.execute(
+                select(Group).where(Group.id == sess.group_id)
+            )
+            group = group_result.scalar_one_or_none()
+        if not group:
+            return False
+        cls = group.class_
+        if not cls:
+            from src.modules.classes.models import Class
+
+            class_result = await self._session.execute(
+                select(Class).where(Class.id == group.class_id)
+            )
+            cls = class_result.scalar_one_or_none()
+        effective_teacher = group.teacher_id or (cls.teacher_id if cls else None)
+        return effective_teacher == actor.id
+
+    async def _assert_session_access(self, sess: Session, actor: User) -> None:
+        if actor.role in ("owner", "superAdmin"):
+            return
+        if actor.role == "admin":
+            branch_ids_scope = self._get_branch_scope(actor)
+            if branch_ids_scope is not None and sess.branch_id in branch_ids_scope:
+                return
+        if await self._is_teacher_session(sess, actor):
+            return
+        from src.core.exceptions import PermissionDenied
+        raise PermissionDenied()
+
     async def list_sessions(self, params: dict, actor: User) -> dict:
         branch_ids_scope = self._get_branch_scope(actor)
 
@@ -91,12 +125,16 @@ class SessionService:
         if from_date and to_date:
             if (to_date - from_date).days > 62:
                 raise DateRangeTooWide()
+
+        teacher_id = params.get("teacher_id")
+        if actor.role == "teacher":
+            teacher_id = actor.id
                 
         sessions, total = await self._repo.get_all(
             group_id=params.get("group_id"),
             branch_id=branch_id,
             branch_ids=branch_ids,
-            teacher_id=params.get("teacher_id"),
+            teacher_id=teacher_id,
             room=params.get("room"),
             from_date=params.get("from_date"),
             to_date=params.get("to_date"),
@@ -141,8 +179,9 @@ class SessionService:
         if branch_ids_scope is not None and sess.branch_id not in branch_ids_scope:
             from src.core.exceptions import ForbiddenBranch
             raise ForbiddenBranch()
-        return _build_response(sess).model_dump(by_alias=True)
-
+        if actor.role == "teacher" and not await self._is_teacher_session(sess, actor):
+            from src.core.exceptions import PermissionDenied
+            raise PermissionDenied()
         return _build_response(sess).model_dump(by_alias=True)
 
     async def update_session(self, session_id: int, data: dict, actor: User, ip: Optional[str] = None) -> dict:
@@ -153,10 +192,13 @@ class SessionService:
         if branch_ids_scope is not None and sess.branch_id not in branch_ids_scope:
             from src.core.exceptions import ForbiddenBranch
             raise ForbiddenBranch()
+        if actor.role == "teacher" and not await self._is_teacher_session(sess, actor):
+            from src.core.exceptions import PermissionDenied
+            raise PermissionDenied()
 
         changed = []
         for field in ("session_date", "start_time", "end_time", "room", "status", "notes"):
-            if field in data:
+            if field in data and data[field] is not None:
                 setattr(sess, field, data[field])
                 changed.append(field)
 

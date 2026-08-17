@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from src.core.database import DBSessionDep
-from src.modules.auth.dependencies import require_role
+from src.modules.auth.dependencies import require_manage_sessions
 from src.modules.sessions.schemas import (
     GenerateSessionsRequest, UpdateSessionRequest
 )
@@ -17,17 +17,12 @@ def get_session_service(session: DBSessionDep) -> SessionService:
     return SessionService(session)
 
 
-def require_manage_sessions(user: User = Depends(require_role(["owner", "superAdmin", "admin"]))) -> User:
-    if user.role in ("owner", "superAdmin"):
-        return user
-    perms = user.permissions or {}
-    if perms.get("manageSessions"):
-        return user
-    from src.core.exceptions import PermissionDenied
-    raise PermissionDenied(message="Requires manageSessions permission.")
-
-
-def require_delete_sessions(user: User = Depends(require_role(["owner", "superAdmin"]))) -> User:
+def require_delete_sessions(
+    user: User = Depends(require_manage_sessions)
+) -> User:
+    if user.role not in ("owner", "superAdmin"):
+        from src.core.exceptions import PermissionDenied
+        raise PermissionDenied(message="Requires one of roles: owner, superAdmin")
     return user
 
 
@@ -73,10 +68,6 @@ async def get_session(
     return {"data": data}
 
 
-    data = await service.get_session(session_id, actor)
-    return {"data": data}
-
-
 @router.patch("/{session_id}", summary="Update session")
 async def update_session(
     session_id: int,
@@ -86,7 +77,7 @@ async def update_session(
     service: SessionService = Depends(get_session_service),
 ):
     data = await service.update_session(
-        session_id, body.model_dump(exclude_none=True, by_alias=False), actor,
+        session_id, body.model_dump(by_alias=False), actor,
         ip=request.client.host if request.client else None,
     )
     return {"data": data}

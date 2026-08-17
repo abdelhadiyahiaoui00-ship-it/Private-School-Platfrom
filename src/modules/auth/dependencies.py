@@ -97,3 +97,38 @@ def require_manage_subscriptions(
             return user
     from src.core.exceptions import PermissionDenied
     raise PermissionDenied(message="Requires manageSubscriptions permission.")
+
+
+def require_manage_sessions(
+    user: User = Depends(require_role(["owner", "superAdmin", "admin", "teacher"]))
+) -> User:
+    """
+    Grants access to:
+    - owner, superAdmin: always
+    - admin with manageSessions permission: always
+    - teacher: only for their own sessions/groups (enforced in service layer)
+    """
+    if user.role in ("owner", "superAdmin"):
+        return user
+    if user.role == "admin":
+        perms = user.permissions or {}
+        if perms.get("manageSessions"):
+            return user
+    if user.role == "teacher":
+        return user
+    from src.core.exceptions import PermissionDenied
+    raise PermissionDenied(message="Requires manageSessions permission.")
+
+
+def require_manage_sessions_admin_only(
+    user: User = Depends(require_role(["owner", "superAdmin", "admin"]))
+) -> User:
+    """Admin-only version - teachers cannot use this dependency."""
+    if user.role in ("owner", "superAdmin"):
+        return user
+    if user.role == "admin":
+        perms = user.permissions or {}
+        if perms.get("manageSessions"):
+            return user
+    from src.core.exceptions import PermissionDenied
+    raise PermissionDenied(message="Requires manageSessions permission.")
