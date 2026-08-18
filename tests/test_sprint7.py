@@ -599,6 +599,47 @@ async def test_mark_present_then_correct_to_absent_reverses_session(
     assert after_absent == after_present + 1
 
 
+async def test_clear_attendance_with_null_status_reverses_and_unmarks(
+    client,
+    owner_token,
+    past_session_id,
+    student_with_session_sub_id,
+    get_subscription_remaining,
+):
+    before = await get_subscription_remaining(student_with_session_sub_id)
+    mark_r = await client.patch(
+        f"/api/sessions/{past_session_id}/attendance",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"records": [{"studentId": student_with_session_sub_id, "status": "present"}]},
+    )
+    assert mark_r.status_code == 200
+    after_present = await get_subscription_remaining(student_with_session_sub_id)
+    assert after_present == before - 1
+
+    clear_r = await client.patch(
+        f"/api/sessions/{past_session_id}/attendance",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "records": [
+                {
+                    "studentId": student_with_session_sub_id,
+                    "status": None,
+                    "overridePresent": False,
+                }
+            ]
+        },
+    )
+    assert clear_r.status_code == 200
+    after_clear = await get_subscription_remaining(student_with_session_sub_id)
+    assert after_clear == before
+    row = next(
+        entry
+        for entry in clear_r.json()["data"]["roster"]
+        if entry["student"]["id"] == student_with_session_sub_id
+    )
+    assert row["attendance"] is None
+
+
 async def test_mark_present_expired_subscription_blocked(
     client, owner_token, past_session_id, student_with_expired_sub_id
 ):
@@ -716,6 +757,32 @@ async def test_get_attendance_matrix_200(client, owner_token, group_id):
     assert "teacherName" in d
     assert "branchName" in d
     assert "dateRangeLabel" in d
+    assert d["teacherName"] == "Teacher Main"
+    assert d["branchName"].startswith("Sprint 7 Branch")
+
+
+async def test_get_session_detail_includes_action_flags(
+    client, owner_token, past_session_id, future_session_id
+):
+    past_r = await client.get(
+        f"/api/sessions/{past_session_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert past_r.status_code == 200
+    past = past_r.json()["data"]
+    assert past["canMarkAttendance"] is True
+    assert past["canRequestReschedule"] is False
+    assert past["canDirectReschedule"] is False
+
+    future_r = await client.get(
+        f"/api/sessions/{future_session_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert future_r.status_code == 200
+    future = future_r.json()["data"]
+    assert future["canMarkAttendance"] is False
+    assert future["canRequestReschedule"] is True
+    assert future["canDirectReschedule"] is True
 
 
 async def test_get_attendance_matrix_cells_count_matches_sessions(
@@ -745,6 +812,38 @@ async def test_get_attendance_matrix_direction_prev(client, owner_token, group_i
         headers={"Authorization": f"Bearer {owner_token}"},
     )
     assert r.status_code == 200
+
+
+async def test_extend_subscriptions_preview_returns_items(
+    client,
+    owner_token,
+    group_id,
+    student_with_session_sub_id,
+    student_with_monthly_sub_id,
+):
+    r = await client.get(
+        f"/api/groups/{group_id}/extend-subscriptions/preview?sessionsToAdd=2&daysToAdd=5",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert "items" in d
+    assert d["activeCount"] == len(d["items"])
+    assert d["sessionBasedCount"] == 2
+    assert d["monthlyCount"] == 1
+
+    session_item = next(
+        item for item in d["items"] if item["studentName"] == "Session Student"
+    )
+    assert session_item["subscriptionId"]
+    assert session_item["current"] == 2
+    assert session_item["afterExtension"] == 4
+
+    monthly_item = next(
+        item for item in d["items"] if item["studentName"] == "Monthly Student"
+    )
+    assert isinstance(monthly_item["current"], str)
+    assert isinstance(monthly_item["afterExtension"], str)
 
 
 async def test_mark_teacher_absent_success(

@@ -294,14 +294,50 @@ class SubscriptionService:
         res = self._map_to_response(sub, is_latest)
         return res.model_dump(by_alias=True)
 
-    async def get_bulk_extend_preview(self, group_id: int, actor: User) -> dict:
+    async def get_bulk_extend_preview(
+        self,
+        group_id: int,
+        actor: User,
+        days_to_add: Optional[int] = None,
+        sessions_to_add: Optional[int] = None,
+    ) -> dict:
         subs = await self.sub_repo.get_active_for_group(group_id)
         if not subs:
-            return {"activeCount": 0, "monthlyCount": 0, "sessionBasedCount": 0}
+            return {
+                "items": [],
+                "activeCount": 0,
+                "monthlyCount": 0,
+                "sessionBasedCount": 0,
+            }
             
         monthly = sum(1 for s in subs if s.type == "monthly")
         session_based = sum(1 for s in subs if s.type == "session_based")
+        items = []
+        for sub in subs:
+            student_name = ""
+            if sub.student:
+                student_name = f"{sub.student.first_name} {sub.student.last_name}"
+
+            if sub.type == "monthly":
+                current = sub.end_date.isoformat() if sub.end_date else None
+                after_extension = current
+                if sub.end_date and days_to_add:
+                    after_extension = (sub.end_date + timedelta(days=days_to_add)).isoformat()
+            else:
+                current = sub.remaining_sessions or 0
+                after_extension = current + (sessions_to_add or 0)
+
+            items.append(
+                {
+                    "subscriptionId": sub.id,
+                    "studentName": student_name,
+                    "current": current,
+                    "afterExtension": after_extension,
+                }
+            )
+
         return {
+            "items": items,
             "activeCount": len(subs),
             "monthlyCount": monthly,
             "sessionBasedCount": session_based

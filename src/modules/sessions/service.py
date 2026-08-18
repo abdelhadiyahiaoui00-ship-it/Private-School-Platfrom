@@ -35,6 +35,11 @@ def _build_response(sess: Session) -> SessionResponse:
     cls = group.class_ if group else None
     mod = cls.module if cls else None
     teacher = group.teacher if (group and group.teacher_id) else (cls.teacher if cls else None)
+    today = date.today()
+    can_mark_attendance = (
+        sess.status in ("scheduled", "completed") and sess.session_date <= today
+    )
+    can_request_reschedule = sess.status == "scheduled" and sess.session_date >= today
 
     return SessionResponse(
         id=sess.id,
@@ -55,6 +60,9 @@ def _build_response(sess: Session) -> SessionResponse:
         notes=sess.notes,
         attendance_marked_at=sess.attendance_marked_at,
         attendance_marked_by=sess.attendance_marked_by,
+        can_mark_attendance=can_mark_attendance,
+        can_request_reschedule=can_request_reschedule,
+        can_direct_reschedule=can_request_reschedule,
         created_at=sess.created_at,
         updated_at=sess.updated_at,
     )

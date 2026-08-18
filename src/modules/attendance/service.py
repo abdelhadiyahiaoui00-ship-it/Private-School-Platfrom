@@ -75,6 +75,36 @@ async def _resolve_session_based_subscription(
     return result.scalar_one_or_none()
 
 
+async def _resolve_latest_active_subscription_map(
+    db: AsyncSession,
+    student_ids: set[int],
+    group_id: int,
+    type_: Optional[str] = None,
+) -> dict[int, Subscription]:
+    if not student_ids:
+        return {}
+
+    query = select(Subscription).where(
+        Subscription.student_id.in_(student_ids),
+        Subscription.group_id == group_id,
+        Subscription.status == "active",
+    )
+    if type_:
+        query = query.where(Subscription.type == type_)
+    query = query.order_by(
+        Subscription.student_id.asc(),
+        Subscription.created_at.desc(),
+        Subscription.id.desc(),
+    )
+
+    result = await db.execute(query)
+    subscriptions: dict[int, Subscription] = {}
+    for sub in result.scalars().all():
+        if sub.student_id not in subscriptions:
+            subscriptions[sub.student_id] = sub
+    return subscriptions
+
+
 def _subscription_is_expired(sub: Optional[Subscription]) -> bool:
     if sub is None:
         return True
@@ -177,6 +207,9 @@ async def _build_roster(
 
     monthly_warning, session_warning = await _get_expiry_warning_config(db)
     admin_override_allowed = _is_authorized_for_override(actor)
+    sub_map = await _resolve_latest_active_subscription_map(
+        db, all_student_ids, session.group_id
+    )
 
     entries: list[RosterEntry] = []
     for student_id in sorted(all_student_ids):
@@ -191,7 +224,7 @@ async def _build_roster(
             avatar_url=user.avatar_url,
             date_of_birth=user.date_of_birth,
         )
-        sub = await _resolve_any_subscription(db, student_id, session.group_id)
+        sub = sub_map.get(student_id)
         is_expired = _subscription_is_expired(sub)
         can_mark_present = not is_expired or admin_override_allowed
 
@@ -279,35 +312,44 @@ class AttendanceService:
             raise AttendanceSessionNotMarkable()
 
         for rec in records:
-            if rec.status not in ATTENDANCE_STATUSES:
+            if rec.status is not None and rec.status not in ATTENDANCE_STATUSES:
                 from src.core.exceptions import ValidationError
 
                 raise ValidationError(message="Invalid attendance status.")
 
         is_admin_override_allowed = _is_authorized_for_override(actor)
+        student_ids = {rec.student_id for rec in records}
+        sub_map = await _resolve_latest_active_subscription_map(
+            self._session, student_ids, session.group_id
+        )
+        session_sub_map = await _resolve_latest_active_subscription_map(
+            self._session, student_ids, session.group_id, type_="session_based"
+        )
 
         violations: list[dict] = []
+        violation_student_ids: set[int] = set()
         for rec in records:
             if rec.status != "present":
                 continue
-            sub = await _resolve_any_subscription(
-                self._session, rec.student_id, session.group_id
-            )
+            sub = sub_map.get(rec.student_id)
             is_blocked = _subscription_is_expired(sub)
             is_override = rec.override_present is True and is_admin_override_allowed
             if is_blocked and not is_override:
-                from src.modules.users.models import User as UserModel
+                violation_student_ids.add(rec.student_id)
 
-                user_result = await self._session.execute(
-                    select(UserModel).where(UserModel.id == rec.student_id)
-                )
-                user = user_result.scalar_one_or_none()
-                student_name = (
-                    f"{user.first_name} {user.last_name}" if user else str(rec.student_id)
-                )
+        if violation_student_ids:
+            from src.modules.users.models import User as UserModel
+
+            user_result = await self._session.execute(
+                select(UserModel).where(UserModel.id.in_(violation_student_ids))
+            )
+            users_by_id = {user.id: user for user in user_result.scalars().all()}
+            for student_id in sorted(violation_student_ids):
+                user = users_by_id.get(student_id)
+                student_name = f"{user.first_name} {user.last_name}" if user else str(student_id)
                 violations.append(
                     {
-                        "studentId": rec.student_id,
+                        "studentId": student_id,
                         "studentName": student_name,
                         "reason": "SUBSCRIPTION_EXPIRED",
                     }
@@ -323,25 +365,48 @@ class AttendanceService:
         first_mark = session.attendance_marked_at is None
         changed_records = 0
         override_count = 0
-
-        for rec in records:
-            att_result = await self._session.execute(
+        existing_map: dict[int, Attendance] = {}
+        if student_ids:
+            existing_result = await self._session.execute(
                 select(Attendance).where(
                     Attendance.session_id == session_id,
-                    Attendance.student_id == rec.student_id,
+                    Attendance.student_id.in_(student_ids),
                 )
             )
-            existing = att_result.scalar_one_or_none()
+            existing_map = {
+                attendance.student_id: attendance
+                for attendance in existing_result.scalars().all()
+            }
+
+        for rec in records:
+            existing = existing_map.get(rec.student_id)
             old_status = existing.status if existing else None
             old_consumed = existing.session_consumed if existing else False
             old_override = existing.is_override if existing else False
 
-            sub = await _resolve_any_subscription(
-                self._session, rec.student_id, session.group_id
-            )
-            session_sub = await _resolve_session_based_subscription(
-                self._session, rec.student_id, session.group_id
-            )
+            if rec.status is None:
+                if existing:
+                    if old_status == "present" and old_consumed:
+                        session_sub = session_sub_map.get(rec.student_id)
+                        if session_sub:
+                            locked_result = await self._session.execute(
+                                select(Subscription)
+                                .where(Subscription.id == session_sub.id)
+                                .with_for_update()
+                            )
+                            locked_sub = locked_result.scalar_one_or_none()
+                            if locked_sub:
+                                locked_sub.remaining_sessions = (
+                                    locked_sub.remaining_sessions or 0
+                                ) + 1
+                                session_sub_map[rec.student_id] = locked_sub
+                                sub_map[rec.student_id] = locked_sub
+                    await self._session.delete(existing)
+                    changed_records += 1
+                continue
+
+            sub = sub_map.get(rec.student_id)
+            session_sub = session_sub_map.get(rec.student_id)
             is_expired = _subscription_is_expired(sub)
             is_override = (
                 rec.status == "present"
@@ -354,12 +419,18 @@ class AttendanceService:
             if rec.status == "present":
                 if old_status != "present":
                     if not is_override and sub and sub.type == "session_based":
-                        await self._session.execute(
+                        locked_result = await self._session.execute(
                             select(Subscription)
                             .where(Subscription.id == sub.id)
                             .with_for_update()
                         )
-                        sub.remaining_sessions = max(0, (sub.remaining_sessions or 0) - 1)
+                        locked_sub = locked_result.scalar_one_or_none()
+                        if locked_sub:
+                            locked_sub.remaining_sessions = max(
+                                0, (locked_sub.remaining_sessions or 0) - 1
+                            )
+                            sub_map[rec.student_id] = locked_sub
+                            session_sub_map[rec.student_id] = locked_sub
                         session_consumed = True
                     else:
                         session_consumed = False
@@ -367,12 +438,18 @@ class AttendanceService:
                     is_override = old_override
             elif old_status == "present":
                 if old_consumed and session_sub and session_sub.type == "session_based":
-                    await self._session.execute(
+                    locked_result = await self._session.execute(
                         select(Subscription)
                         .where(Subscription.id == session_sub.id)
                         .with_for_update()
                     )
-                    session_sub.remaining_sessions = (session_sub.remaining_sessions or 0) + 1
+                    locked_sub = locked_result.scalar_one_or_none()
+                    if locked_sub:
+                        locked_sub.remaining_sessions = (
+                            locked_sub.remaining_sessions or 0
+                        ) + 1
+                        session_sub_map[rec.student_id] = locked_sub
+                        sub_map[rec.student_id] = locked_sub
 
             if existing:
                 if (
@@ -593,6 +670,9 @@ class AttendanceService:
 
         monthly_warning, session_warning = await _get_expiry_warning_config(self._session)
         admin_override_allowed = _is_authorized_for_override(actor)
+        sub_map = await _resolve_latest_active_subscription_map(
+            self._session, all_student_ids, group_id
+        )
         students_out: list[MatrixStudentRow] = []
         for student_id in sorted(all_student_ids):
             user = users_map.get(student_id)
@@ -606,7 +686,7 @@ class AttendanceService:
                 avatar_url=user.avatar_url,
                 date_of_birth=user.date_of_birth,
             )
-            sub = await _resolve_any_subscription(self._session, student_id, group_id)
+            sub = sub_map.get(student_id)
             is_expired = _subscription_is_expired(sub)
             can_mark_present = not is_expired or admin_override_allowed
             cells: list[MatrixCell] = []

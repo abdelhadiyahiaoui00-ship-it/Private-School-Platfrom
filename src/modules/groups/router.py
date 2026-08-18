@@ -134,9 +134,16 @@ async def get_extend_subscriptions_preview(
     group_id: int,
     session: DBSessionDep,
     actor: User = Depends(require_manage_classes),
+    days_to_add: Optional[int] = Query(None, alias="daysToAdd"),
+    sessions_to_add: Optional[int] = Query(None, alias="sessionsToAdd"),
 ):
     sub_service = SubscriptionService(session)
-    result = await sub_service.get_bulk_extend_preview(group_id, actor)
+    result = await sub_service.get_bulk_extend_preview(
+        group_id,
+        actor,
+        days_to_add=days_to_add,
+        sessions_to_add=sessions_to_add,
+    )
     return {"data": result}
 
 

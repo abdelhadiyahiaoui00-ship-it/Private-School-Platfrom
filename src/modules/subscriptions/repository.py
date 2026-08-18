@@ -145,17 +145,11 @@ class SubscriptionRepository:
 
     async def get_active_for_group(self, group_id: int) -> list[Subscription]:
         """All active subscriptions under a group — used for bulk extend."""
-        today = date.today()
         result = await self._session.execute(
             select(Subscription)
             .where(
                 Subscription.group_id == group_id,
                 Subscription.status == "active",
-                # Exclude expired ones: end_date is null (session-based) or end_date >= today
-                or_(
-                    Subscription.end_date.is_(None),
-                    Subscription.end_date >= today,
-                ),
             )
             .options(
                 selectinload(Subscription.student),

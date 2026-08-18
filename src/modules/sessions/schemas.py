@@ -26,6 +26,9 @@ class SessionResponse(BaseModel):
     notes: Optional[str] = None
     attendance_marked_at: Optional[datetime] = None
     attendance_marked_by: Optional[int] = None
+    can_mark_attendance: bool
+    can_request_reschedule: bool
+    can_direct_reschedule: bool
     created_at: datetime
     updated_at: datetime
 

@@ -109,7 +109,7 @@ class AttendanceRecordIn(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     student_id: int
-    status: str
+    status: Optional[str] = None
     override_present: bool = False
 
 
