@@ -365,6 +365,7 @@ class AttendanceService:
         first_mark = session.attendance_marked_at is None
         changed_records = 0
         override_count = 0
+        response_records: list[dict] = []
         existing_map: dict[int, Attendance] = {}
         if student_ids:
             existing_result = await self._session.execute(
@@ -378,6 +379,8 @@ class AttendanceService:
                 for attendance in existing_result.scalars().all()
             }
 
+        record_plans: list[dict] = []
+        subscription_adjustments: dict[int, int] = {}
         for rec in records:
             existing = existing_map.get(rec.student_id)
             old_status = existing.status if existing else None
@@ -389,20 +392,18 @@ class AttendanceService:
                     if old_status == "present" and old_consumed:
                         session_sub = session_sub_map.get(rec.student_id)
                         if session_sub:
-                            locked_result = await self._session.execute(
-                                select(Subscription)
-                                .where(Subscription.id == session_sub.id)
-                                .with_for_update()
+                            subscription_adjustments[session_sub.id] = (
+                                subscription_adjustments.get(session_sub.id, 0) + 1
                             )
-                            locked_sub = locked_result.scalar_one_or_none()
-                            if locked_sub:
-                                locked_sub.remaining_sessions = (
-                                    locked_sub.remaining_sessions or 0
-                                ) + 1
-                                session_sub_map[rec.student_id] = locked_sub
-                                sub_map[rec.student_id] = locked_sub
-                    await self._session.delete(existing)
-                    changed_records += 1
+                record_plans.append(
+                    {
+                        "record": rec,
+                        "existing": existing,
+                        "clear": True,
+                        "session_consumed": False,
+                        "is_override": False,
+                    }
+                )
                 continue
 
             sub = sub_map.get(rec.student_id)
@@ -419,18 +420,9 @@ class AttendanceService:
             if rec.status == "present":
                 if old_status != "present":
                     if not is_override and sub and sub.type == "session_based":
-                        locked_result = await self._session.execute(
-                            select(Subscription)
-                            .where(Subscription.id == sub.id)
-                            .with_for_update()
+                        subscription_adjustments[sub.id] = (
+                            subscription_adjustments.get(sub.id, 0) - 1
                         )
-                        locked_sub = locked_result.scalar_one_or_none()
-                        if locked_sub:
-                            locked_sub.remaining_sessions = max(
-                                0, (locked_sub.remaining_sessions or 0) - 1
-                            )
-                            sub_map[rec.student_id] = locked_sub
-                            session_sub_map[rec.student_id] = locked_sub
                         session_consumed = True
                     else:
                         session_consumed = False
@@ -438,19 +430,57 @@ class AttendanceService:
                     is_override = old_override
             elif old_status == "present":
                 if old_consumed and session_sub and session_sub.type == "session_based":
-                    locked_result = await self._session.execute(
-                        select(Subscription)
-                        .where(Subscription.id == session_sub.id)
-                        .with_for_update()
+                    subscription_adjustments[session_sub.id] = (
+                        subscription_adjustments.get(session_sub.id, 0) + 1
                     )
-                    locked_sub = locked_result.scalar_one_or_none()
-                    if locked_sub:
-                        locked_sub.remaining_sessions = (
-                            locked_sub.remaining_sessions or 0
-                        ) + 1
-                        session_sub_map[rec.student_id] = locked_sub
-                        sub_map[rec.student_id] = locked_sub
 
+            record_plans.append(
+                {
+                    "record": rec,
+                    "existing": existing,
+                    "clear": False,
+                    "session_consumed": session_consumed,
+                    "is_override": is_override,
+                }
+            )
+
+        if subscription_adjustments:
+            locked_result = await self._session.execute(
+                select(Subscription)
+                .where(Subscription.id.in_(subscription_adjustments.keys()))
+                .with_for_update()
+            )
+            locked_subscriptions = {
+                sub.id: sub for sub in locked_result.scalars().all()
+            }
+            for sub_id, adjustment in subscription_adjustments.items():
+                locked_sub = locked_subscriptions.get(sub_id)
+                if not locked_sub:
+                    continue
+                locked_sub.remaining_sessions = max(
+                    0, (locked_sub.remaining_sessions or 0) + adjustment
+                )
+
+        for plan in record_plans:
+            rec = plan["record"]
+            existing = plan["existing"]
+            if plan["clear"]:
+                if existing:
+                    await self._session.delete(existing)
+                    changed_records += 1
+                response_records.append(
+                    {
+                        "studentId": rec.student_id,
+                        "status": None,
+                        "sessionConsumed": False,
+                        "isOverride": False,
+                        "markedAt": None,
+                    }
+                )
+                continue
+
+            session_consumed = plan["session_consumed"]
+            is_override = plan["is_override"]
             if existing:
                 if (
                     existing.status != rec.status
@@ -475,6 +505,16 @@ class AttendanceService:
                 )
                 self._session.add(new_att)
                 changed_records += 1
+
+            response_records.append(
+                {
+                    "studentId": rec.student_id,
+                    "status": rec.status,
+                    "sessionConsumed": session_consumed,
+                    "isOverride": is_override,
+                    "markedAt": now.isoformat(),
+                }
+            )
 
             if is_override:
                 override_count += 1
@@ -528,11 +568,24 @@ class AttendanceService:
                 category="sessions",
                 entity_type="session",
                 entity_id=session_id,
-                metadata={"changedRecords": changed_records, "overrideCount": override_count},
+                metadata={
+                    "changedRecords": changed_records,
+                    "overrideCount": override_count,
+                },
                 ip_address=ip,
             )
 
-        return await self.get_roster(session_id, actor)
+        return {
+            "success": True,
+            "session": await self._build_session_detail_dict(session),
+            "canMarkAttendance": (
+                session.status in ("scheduled", "completed")
+                and session.session_date <= today
+            ),
+            "changedRecords": changed_records,
+            "overrideCount": override_count,
+            "records": response_records,
+        }
 
     async def get_attendance_matrix(
         self,

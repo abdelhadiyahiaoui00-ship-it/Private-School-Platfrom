@@ -158,7 +158,7 @@ async def extend_subscriptions(
     ip = request.client.host if request.client else None
     sub_service = SubscriptionService(session)
     result = await sub_service.apply_bulk_extend(
-        group_id, body.model_dump(exclude_none=True), actor, ip=ip
+        group_id, body.model_dump(by_alias=False), actor, ip=ip
     )
     return {"data": result}
 

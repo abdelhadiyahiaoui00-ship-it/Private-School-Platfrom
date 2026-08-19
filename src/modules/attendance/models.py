@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.base_model import BaseModel
@@ -34,4 +34,5 @@ class Attendance(BaseModel):
             "status IN ('present', 'absent', 'excused')",
             name="chk_attendance_status",
         ),
+        Index("idx_attendance_session_student", "session_id", "student_id"),
     )

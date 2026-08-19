@@ -35,6 +35,26 @@ class SubscriptionRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_ids(self, sub_ids: list[int]) -> list[Subscription]:
+        if not sub_ids:
+            return []
+
+        result = await self._session.execute(
+            select(Subscription)
+            .where(Subscription.id.in_(sub_ids))
+            .options(
+                selectinload(Subscription.student),
+                selectinload(Subscription.teacher),
+                selectinload(Subscription.branch),
+                selectinload(Subscription.group)
+                    .selectinload(Group.class_)
+                    .selectinload(Class.module),
+                selectinload(Subscription.payment),
+            )
+        )
+        subs_by_id = {sub.id: sub for sub in result.scalars().all()}
+        return [subs_by_id[sub_id] for sub_id in sub_ids if sub_id in subs_by_id]
+
     async def get_latest_for_enrollment(self, enrollment_id: int) -> Optional[Subscription]:
         result = await self._session.execute(
             select(Subscription)

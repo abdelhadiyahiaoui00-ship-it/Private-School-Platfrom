@@ -354,6 +354,7 @@ class SubscriptionService:
         session_id = payload.get("session_id")
         
         extended_count = 0
+        updated_subscription_ids: list[int] = []
         for sub in subs:
             try:
                 if sub.type == "monthly":
@@ -388,7 +389,8 @@ class SubscriptionService:
                 log = list(sub.extension_log) if sub.extension_log else []
                 log.append(entry)
                 sub.extension_log = log
-                await self.sub_repo.save(sub)
+                sub = await self.sub_repo.save(sub)
+                updated_subscription_ids.append(sub.id)
                 extended_count += 1
             except Exception as e:
                 logger.error(f"Failed to extend sub {sub.id}: {e}")
@@ -404,7 +406,18 @@ class SubscriptionService:
             ip_address=ip,
         )
 
-        return {"extendedCount": extended_count}
+        subscriptions = []
+        updated_subs = await self.sub_repo.get_by_ids(updated_subscription_ids)
+        latest_map = await self.sub_repo.get_latest_subscription_ids(
+            [sub.enrollment_id for sub in updated_subs]
+        )
+        for sub in updated_subs:
+            is_latest = latest_map.get(sub.enrollment_id) == sub.id
+            subscriptions.append(
+                self._map_to_response(sub, is_latest).model_dump(by_alias=True)
+            )
+
+        return {"extendedCount": extended_count, "subscriptions": subscriptions}
 
     async def cancel_subscription(self, sub_id: int, actor: User, reason: Optional[str] = None, ip: Optional[str] = None) -> dict:
         sub = await self.sub_repo.get_by_id(sub_id)

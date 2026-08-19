@@ -555,6 +555,12 @@ async def test_mark_attendance_present_consumes_session(
         json={"records": [{"studentId": student_with_session_sub_id, "status": "present"}]},
     )
     assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["success"] is True
+    assert d["changedRecords"] == 1
+    assert d["records"][0]["studentId"] == student_with_session_sub_id
+    assert d["records"][0]["status"] == "present"
+    assert d["records"][0]["sessionConsumed"] is True
     after = await get_subscription_remaining(student_with_session_sub_id)
     assert after == before - 1
 
@@ -573,6 +579,10 @@ async def test_mark_attendance_absent_does_not_consume(
         json={"records": [{"studentId": student_with_session_sub_id, "status": "absent"}]},
     )
     assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["success"] is True
+    assert d["records"][0]["status"] == "absent"
+    assert d["records"][0]["sessionConsumed"] is False
     after = await get_subscription_remaining(student_with_session_sub_id)
     assert after == before
 
@@ -630,11 +640,16 @@ async def test_clear_attendance_with_null_status_reverses_and_unmarks(
         },
     )
     assert clear_r.status_code == 200
+    assert clear_r.json()["data"]["records"][0]["status"] is None
     after_clear = await get_subscription_remaining(student_with_session_sub_id)
     assert after_clear == before
+    roster_r = await client.get(
+        f"/api/sessions/{past_session_id}/attendance",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
     row = next(
         entry
-        for entry in clear_r.json()["data"]["roster"]
+        for entry in roster_r.json()["data"]["roster"]
         if entry["student"]["id"] == student_with_session_sub_id
     )
     assert row["attendance"] is None
@@ -844,6 +859,43 @@ async def test_extend_subscriptions_preview_returns_items(
     )
     assert isinstance(monthly_item["current"], str)
     assert isinstance(monthly_item["afterExtension"], str)
+
+
+async def test_bulk_extend_returns_updated_subscriptions(
+    client,
+    owner_token,
+    group_id,
+    student_with_session_sub_id,
+    student_with_monthly_sub_id,
+    get_monthly_sub_end_date,
+):
+    monthly_before = await get_monthly_sub_end_date(student_with_monthly_sub_id)
+    r = await client.post(
+        f"/api/groups/{group_id}/extend-subscriptions",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "sessionsToAdd": 2,
+            "daysToAdd": 5,
+            "reason": "makeup session",
+        },
+    )
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["extendedCount"] == 3
+    assert len(d["subscriptions"]) == 3
+
+    session_sub = next(
+        sub for sub in d["subscriptions"] if sub["studentId"] == student_with_session_sub_id
+    )
+    assert session_sub["remainingSessions"] == 4
+    assert session_sub["totalSessions"] == 10
+    assert session_sub["extensionLog"][-1]["sessionsAdded"] == 2
+
+    monthly_sub = next(
+        sub for sub in d["subscriptions"] if sub["studentId"] == student_with_monthly_sub_id
+    )
+    assert monthly_sub["endDate"] == (monthly_before + timedelta(days=5)).isoformat()
+    assert monthly_sub["extensionLog"][-1]["daysAdded"] == 5
 
 
 async def test_mark_teacher_absent_success(
