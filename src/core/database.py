@@ -92,3 +92,9 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 # Clean annotated type from Version 1
 DBSessionDep = Annotated[AsyncSession, Depends(get_db)]
+
+
+def _register_models() -> None:
+    from src.modules.assignments.models import Assignment, AssignmentFile, AssignmentSubmission  # noqa: F401
+
+_register_models()
