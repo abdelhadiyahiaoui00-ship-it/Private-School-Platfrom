@@ -202,6 +202,7 @@ def create_app() -> FastAPI:
     app.include_router(landing_router, prefix="/api")
     app.include_router(public_router, prefix="/api")
     app.include_router(modules_router, prefix="/api")
+    app.include_router(my_classes_router, prefix="/api")
     app.include_router(classes_router, prefix="/api")
     app.include_router(groups_router, prefix="/api")
     app.include_router(sessions_router, prefix="/api")
@@ -216,7 +217,7 @@ def create_app() -> FastAPI:
     app.include_router(payments_router, prefix="/api")
     app.include_router(assignments_router, prefix="/api")
     app.include_router(submissions_router, prefix="/api")
-    app.include_router(my_classes_router, prefix="/api")
+
 
 
     @app.get("/health")

@@ -3,6 +3,7 @@ from typing import Optional
 import uuid
 
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.pagination import build_pagination
@@ -282,7 +283,11 @@ class AssignmentService:
 
     async def get_my_classes(self, teacher_id: int) -> dict:
         owned_cls_res = await self.session.execute(
-            select(Class).where(and_(Class.teacher_id == teacher_id, Class.status == "active")).order_by(Class.name))
+            select(Class)
+            .where(and_(Class.teacher_id == teacher_id, Class.status == "active"))
+            .options(selectinload(Class.teacher), selectinload(Class.module))
+            .order_by(Class.name)
+        )
         owned_classes = owned_cls_res.scalars().all()
 
         classes_list = []
@@ -301,7 +306,7 @@ class AssignmentService:
                     sub_user = (await self.session.execute(select(User).where(User.id == g.teacher_id))).scalar_one_or_none()
                     if sub_user:
                         substitute = {"id": sub_user.id, "firstName": sub_user.first_name, "lastName": sub_user.last_name, "avatarUrl": sub_user.avatar_url}
-                groups_list.append({"id": g.id, "name": g.name, "capacity": g.capacity, "isOwnedByMe": is_owned, "substitute": substitute})
+                groups_list.append({"id": g.id, "name": g.name, "capacity": g.max_students, "isOwnedByMe": is_owned, "substitute": substitute})
 
             teacher_name = f"{cls.teacher.first_name} {cls.teacher.last_name}" if cls.teacher else ""
             classes_list.append({
@@ -315,11 +320,15 @@ class AssignmentService:
         for g in sub_groups_res.scalars().all():
             if g.id in listed_group_ids:
                 continue
-            cls = (await self.session.execute(select(Class).where(Class.id == g.class_id))).scalar_one_or_none()
+            cls = (await self.session.execute(
+                select(Class)
+                .where(Class.id == g.class_id)
+                .options(selectinload(Class.module), selectinload(Class.branch), selectinload(Class.teacher))
+            )).scalar_one_or_none()
             if not cls:
                 continue
             substitute_groups.append({
-                "id": g.id, "name": g.name, "capacity": g.capacity,
+                "id": g.id, "name": g.name, "capacity": g.max_students,
                 "parentClass": {
                     "id": cls.id, "name": cls.name,
                     "moduleName": cls.module.name if cls.module else "",
@@ -393,8 +402,12 @@ class AssignmentService:
         return {"id": u.id, "firstName": u.first_name, "lastName": u.last_name, "avatarUrl": u.avatar_url, "dateOfBirth": str(u.date_of_birth) if u.date_of_birth else None}
 
     def _build_sub_dict(self, sub: AssignmentSubmission, is_late: bool) -> dict:
-        student = {"id": sub.student.id, "firstName": sub.student.first_name, "lastName": sub.student.last_name,
-                   "avatarUrl": sub.student.avatar_url, "dateOfBirth": None} if sub.student else {"id": sub.student_id}
+        # Check if student is loaded in __dict__
+        if 'student' in sub.__dict__ and sub.student:
+            student = {"id": sub.student.id, "firstName": sub.student.first_name, "lastName": sub.student.last_name,
+                       "avatarUrl": sub.student.avatar_url, "dateOfBirth": None}
+        else:
+            student = {"id": sub.student_id}
         return {
             "id": sub.id, "assignmentId": sub.assignment_id, "studentId": sub.student_id, "student": student,
             "submissionType": sub.submission_type, "responseText": sub.response_text,
@@ -403,12 +416,18 @@ class AssignmentService:
         }
 
     async def _build(self, a: Assignment) -> dict:
-        group = a.group or (await self.session.execute(select(Group).where(Group.id == a.group_id))).scalar_one_or_none()
-        cls = a.class_ or (await self.session.execute(select(Class).where(Class.id == a.class_id))).scalar_one_or_none()
-        creator = a.creator or (await self.session.execute(select(User).where(User.id == a.created_by))).scalar_one_or_none()
+        group = (await self.session.execute(select(Group).where(Group.id == a.group_id))).scalar_one_or_none()
+        cls = (await self.session.execute(
+            select(Class)
+            .where(Class.id == a.class_id)
+            .options(selectinload(Class.branch), selectinload(Class.module))
+        )).scalar_one_or_none()
+        creator = (await self.session.execute(select(User).where(User.id == a.created_by))).scalar_one_or_none()
 
+        db_files = (await self.session.execute(select(AssignmentFile).where(AssignmentFile.assignment_id == a.id))).scalars().all()
         files = [{"id": f.id, "fileUrl": f.file_url, "fileType": f.file_type, "fileName": f.file_name,
-                  "uploadedBy": f.uploaded_by, "uploadedAt": f.uploaded_at.isoformat()} for f in (a.files or [])]
+                  "uploadedBy": f.uploaded_by, "uploadedAt": f.uploaded_at.isoformat()} for f in db_files]
+
         sub_count = (await self.session.execute(select(func.count(AssignmentSubmission.id)).where(AssignmentSubmission.assignment_id == a.id))).scalar() or 0
         eligible = (await self.session.execute(select(func.count(Enrollment.id)).where(and_(Enrollment.group_id == a.group_id, Enrollment.status == "active")))).scalar() or 0
 
@@ -423,9 +442,10 @@ class AssignmentService:
             groups_in_batch = (await self.session.execute(select(func.count(Assignment.id)).where(Assignment.batch_id == a.batch_id))).scalar() or 1
 
         session_date_label = None
-        if a.session_id and a.session:
-            s = a.session
-            session_date_label = f"{s.session_date} — {str(s.start_time)[:5]}"
+        if a.session_id:
+            s = (await self.session.execute(select(Session).where(Session.id == a.session_id))).scalar_one_or_none()
+            if s:
+                session_date_label = f"{s.session_date} — {str(s.start_time)[:5]}"
 
         branch_id = cls.branch_id if cls else 0
         branch_name = cls.branch.name if cls and cls.branch else ""
