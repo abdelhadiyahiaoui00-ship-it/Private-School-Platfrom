@@ -33,8 +33,12 @@ async def get_catalog(
     day_of_week: Optional[int] = Query(None, alias="dayOfWeek", ge=0, le=6),
     subscription_type: Optional[str] = Query(None, alias="subscriptionType"),
     featured: Optional[bool] = Query(None),
+    class_id: Optional[int] = Query(None, alias="classId"),
+    exclude_group_id: Optional[int] = Query(None, alias="excludeGroupId"),
+    has_availability: Optional[bool] = Query(None, alias="hasAvailability"),
+    education_stage: Optional[str] = Query(None, alias="educationStage"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(12, alias="pageSize", ge=1, le=48),
+    page_size: int = Query(12, alias="pageSize", ge=1, le=1000),
 ):
     """No auth required. Returns active groups from active classes in active branches."""
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
@@ -47,6 +51,10 @@ async def get_catalog(
         day_of_week=day_of_week,
         subscription_type=subscription_type,
         featured=featured,
+        class_id=class_id,
+        exclude_group_id=exclude_group_id,
+        has_availability=has_availability,
+        education_stage=education_stage,
         page=page,
         page_size=page_size,
     )

@@ -27,6 +27,10 @@ class PublicRepository:
         module_id: Optional[int] = None,
         day_of_week: Optional[int] = None,
         subscription_type: Optional[str] = None,
+        class_id: Optional[int] = None,
+        exclude_group_id: Optional[int] = None,
+        has_availability: Optional[bool] = None,
+        education_stage: Optional[str] = None,
         page: int = 1,
         page_size: int = 12,
     ) -> tuple[list[Group], int]:
@@ -51,8 +55,30 @@ class PublicRepository:
         if module_id:
             q = q.where(Class.module_id == module_id)
 
+        if class_id:
+            q = q.where(Group.class_id == class_id)
+
+        if exclude_group_id:
+            q = q.where(Group.id != exclude_group_id)
+
         if subscription_type:
             q = q.where(Group.subscription_type == subscription_type)
+
+        if education_stage and education_stage.strip() and education_stage.strip() != "all":
+            q = q.where(Class.education_stage == education_stage.strip())
+
+        if has_availability is not None:
+            active_counts = (
+                select(Enrollment.group_id, func.count(Enrollment.id).label("active_count"))
+                .where(Enrollment.status.in_(["pending", "active"]))
+                .group_by(Enrollment.group_id)
+                .subquery()
+            )
+            q = q.outerjoin(active_counts, active_counts.c.group_id == Group.id)
+            if has_availability:
+                q = q.where(Group.max_students > func.coalesce(active_counts.c.active_count, 0))
+            else:
+                q = q.where(Group.max_students <= func.coalesce(active_counts.c.active_count, 0))
 
         if search:
             q = q.join(Module, Module.id == Class.module_id, isouter=True)

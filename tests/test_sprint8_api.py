@@ -332,3 +332,28 @@ async def test_get_submissions_roster(client, admin_token, teacher_token, studen
     assert d["summary"]["notSubmittedCount"] == 0
     assert len(d["roster"]) == 1
     assert d["roster"][0]["submission"] is not None
+
+
+async def test_public_catalog_filters(client, group_id, class_id):
+    r = await client.get(
+        "/api/public/catalog",
+        params={
+            "classId": class_id,
+            "hasAvailability": True,
+            "educationStage": "all",
+        }
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert "items" in data
+    assert len(data["items"]) == 1
+    assert data["items"][0]["id"] == group_id
+
+    # Exclude group test
+    r_ex = await client.get(
+        "/api/public/catalog",
+        params={"excludeGroupId": group_id}
+    )
+    assert r_ex.status_code == 200
+    assert len(r_ex.json()["data"]["items"]) == 0
+

@@ -70,6 +70,10 @@ class PublicService:
         day_of_week: Optional[int] = None,
         subscription_type: Optional[str] = None,
         featured: Optional[bool] = None,
+        class_id: Optional[int] = None,
+        exclude_group_id: Optional[int] = None,
+        has_availability: Optional[bool] = None,
+        education_stage: Optional[str] = None,
         page: int = 1,
         page_size: int = 12,
     ) -> dict:
@@ -92,6 +96,10 @@ class PublicService:
                 module_id=module_id,
                 day_of_week=day_of_week,
                 subscription_type=subscription_type,
+                class_id=class_id,
+                exclude_group_id=exclude_group_id,
+                has_availability=has_availability,
+                education_stage=education_stage,
                 page=page,
                 page_size=page_size,
             )
