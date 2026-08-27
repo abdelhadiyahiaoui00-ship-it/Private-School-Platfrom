@@ -26,6 +26,7 @@ from src.modules.attendance.schemas import (
 from src.modules.enrollments.models import Enrollment
 from src.modules.enrollments.schemas import StudentBasic
 from src.modules.sessions.models import Session
+from src.modules.sessions.service import _build_response as _build_session_response
 from src.modules.subscriptions.models import Subscription
 from src.modules.users.models import User
 
@@ -263,7 +264,23 @@ class AttendanceService:
         self._session = session
 
     async def _get_session_or_404(self, session_id: int) -> Session:
-        result = await self._session.execute(select(Session).where(Session.id == session_id))
+        from src.modules.classes.models import Class as SchoolClass
+        from src.modules.groups.models import Group
+
+        result = await self._session.execute(
+            select(Session)
+            .where(Session.id == session_id)
+            .options(
+                selectinload(Session.group_)
+                .selectinload(Group.class_)
+                .selectinload(SchoolClass.module),
+                selectinload(Session.group_).selectinload(Group.teacher),
+                selectinload(Session.group_)
+                .selectinload(Group.class_)
+                .selectinload(SchoolClass.teacher),
+                selectinload(Session.branch),
+            )
+        )
         session = result.scalar_one_or_none()
         if not session:
             from src.core.exceptions import ResourceNotFound
@@ -271,10 +288,7 @@ class AttendanceService:
             raise ResourceNotFound(message="Session not found.")
         return session
 
-    async def get_roster(self, session_id: int, actor: User) -> dict:
-        session = await self._get_session_or_404(session_id)
-        await self._assert_session_access(session, actor)
-
+    async def _build_roster_response(self, session: Session, actor: User) -> dict:
         roster, can_mark = await _build_roster(self._session, session, actor)
         summary = AttendanceSummary(
             present_count=sum(
@@ -291,11 +305,17 @@ class AttendanceService:
         )
 
         return AttendanceRosterResponse(
-            session=await self._build_session_detail_dict(session),
+            session=_build_session_response(session).model_dump(by_alias=True),
             can_mark_attendance=can_mark,
             roster=roster,
             summary=summary,
         ).model_dump(by_alias=True)
+
+    async def get_roster(self, session_id: int, actor: User) -> dict:
+        session = await self._get_session_or_404(session_id)
+        await self._assert_session_access(session, actor)
+
+        return await self._build_roster_response(session, actor)
 
     async def save_attendance(
         self,
@@ -365,7 +385,6 @@ class AttendanceService:
         first_mark = session.attendance_marked_at is None
         changed_records = 0
         override_count = 0
-        response_records: list[dict] = []
         existing_map: dict[int, Attendance] = {}
         if student_ids:
             existing_result = await self._session.execute(
@@ -468,15 +487,6 @@ class AttendanceService:
                 if existing:
                     await self._session.delete(existing)
                     changed_records += 1
-                response_records.append(
-                    {
-                        "studentId": rec.student_id,
-                        "status": None,
-                        "sessionConsumed": False,
-                        "isOverride": False,
-                        "markedAt": None,
-                    }
-                )
                 continue
 
             session_consumed = plan["session_consumed"]
@@ -505,16 +515,6 @@ class AttendanceService:
                 )
                 self._session.add(new_att)
                 changed_records += 1
-
-            response_records.append(
-                {
-                    "studentId": rec.student_id,
-                    "status": rec.status,
-                    "sessionConsumed": session_consumed,
-                    "isOverride": is_override,
-                    "markedAt": now.isoformat(),
-                }
-            )
 
             if is_override:
                 override_count += 1
@@ -575,17 +575,7 @@ class AttendanceService:
                 ip_address=ip,
             )
 
-        return {
-            "success": True,
-            "session": await self._build_session_detail_dict(session),
-            "canMarkAttendance": (
-                session.status in ("scheduled", "completed")
-                and session.session_date <= today
-            ),
-            "changedRecords": changed_records,
-            "overrideCount": override_count,
-            "records": response_records,
-        }
+        return await self._build_roster_response(session, actor)
 
     async def get_attendance_matrix(
         self,

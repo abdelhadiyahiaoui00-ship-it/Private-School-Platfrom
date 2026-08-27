@@ -556,11 +556,26 @@ async def test_mark_attendance_present_consumes_session(
     )
     assert r.status_code == 200
     d = r.json()["data"]
-    assert d["success"] is True
-    assert d["changedRecords"] == 1
-    assert d["records"][0]["studentId"] == student_with_session_sub_id
-    assert d["records"][0]["status"] == "present"
-    assert d["records"][0]["sessionConsumed"] is True
+    assert "success" not in d
+    assert "records" not in d
+    assert "session" in d
+    assert "roster" in d
+    assert "summary" in d
+    assert "canMarkAttendance" in d
+    assert "canRequestReschedule" in d["session"]
+    row = next(
+        entry
+        for entry in d["roster"]
+        if entry["student"]["id"] == student_with_session_sub_id
+    )
+    assert row["attendance"]["studentId"] == student_with_session_sub_id
+    assert row["attendance"]["status"] == "present"
+    assert row["attendance"]["sessionConsumed"] is True
+    assert row["attendance"]["isOverride"] is False
+    assert row["attendance"]["markedAt"] is not None
+    assert row["attendance"]["markedByName"] == "Owner User"
+    assert d["summary"]["presentCount"] == 1
+    assert d["summary"]["total"] == len(d["roster"])
     after = await get_subscription_remaining(student_with_session_sub_id)
     assert after == before - 1
 
@@ -580,9 +595,16 @@ async def test_mark_attendance_absent_does_not_consume(
     )
     assert r.status_code == 200
     d = r.json()["data"]
-    assert d["success"] is True
-    assert d["records"][0]["status"] == "absent"
-    assert d["records"][0]["sessionConsumed"] is False
+    assert "success" not in d
+    assert "records" not in d
+    row = next(
+        entry
+        for entry in d["roster"]
+        if entry["student"]["id"] == student_with_session_sub_id
+    )
+    assert row["attendance"]["status"] == "absent"
+    assert row["attendance"]["sessionConsumed"] is False
+    assert d["summary"]["absentCount"] == 1
     after = await get_subscription_remaining(student_with_session_sub_id)
     assert after == before
 
@@ -640,19 +662,16 @@ async def test_clear_attendance_with_null_status_reverses_and_unmarks(
         },
     )
     assert clear_r.status_code == 200
-    assert clear_r.json()["data"]["records"][0]["status"] is None
     after_clear = await get_subscription_remaining(student_with_session_sub_id)
     assert after_clear == before
-    roster_r = await client.get(
-        f"/api/sessions/{past_session_id}/attendance",
-        headers={"Authorization": f"Bearer {owner_token}"},
-    )
+    assert "roster" in clear_r.json()["data"]
     row = next(
         entry
-        for entry in roster_r.json()["data"]["roster"]
+        for entry in clear_r.json()["data"]["roster"]
         if entry["student"]["id"] == student_with_session_sub_id
     )
     assert row["attendance"] is None
+    assert clear_r.json()["data"]["summary"]["unmarkedCount"] == 3
 
 
 async def test_mark_present_expired_subscription_blocked(
