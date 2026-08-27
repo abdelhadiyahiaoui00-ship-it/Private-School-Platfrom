@@ -335,25 +335,41 @@ async def test_get_submissions_roster(client, admin_token, teacher_token, studen
 
 
 async def test_public_catalog_filters(client, group_id, class_id):
-    r = await client.get(
-        "/api/public/catalog",
-        params={
-            "classId": class_id,
-            "hasAvailability": True,
-            "educationStage": "all",
-        }
-    )
-    assert r.status_code == 200
-    data = r.json()["data"]
-    assert "items" in data
-    assert len(data["items"]) == 1
-    assert data["items"][0]["id"] == group_id
+    # 1. Test classId
+    r_class = await client.get("/api/public/catalog", params={"classId": class_id})
+    assert r_class.status_code == 200
+    assert len(r_class.json()["data"]["items"]) == 1
+    assert r_class.json()["data"]["items"][0]["id"] == group_id
 
-    # Exclude group test
-    r_ex = await client.get(
-        "/api/public/catalog",
-        params={"excludeGroupId": group_id}
-    )
-    assert r_ex.status_code == 200
-    assert len(r_ex.json()["data"]["items"]) == 0
+    r_class_none = await client.get("/api/public/catalog", params={"classId": 999999})
+    assert r_class_none.status_code == 200
+    assert len(r_class_none.json()["data"]["items"]) == 0
+
+    # 2. Test excludeGroupId
+    r_ex_match = await client.get("/api/public/catalog", params={"excludeGroupId": group_id})
+    assert r_ex_match.status_code == 200
+    assert len(r_ex_match.json()["data"]["items"]) == 0
+
+    r_ex_other = await client.get("/api/public/catalog", params={"excludeGroupId": 999999})
+    assert r_ex_other.status_code == 200
+    assert len(r_ex_other.json()["data"]["items"]) == 1
+
+    # 3. Test hasAvailability
+    r_avail_true = await client.get("/api/public/catalog", params={"hasAvailability": True})
+    assert r_avail_true.status_code == 200
+    assert len(r_avail_true.json()["data"]["items"]) == 1
+
+    r_avail_false = await client.get("/api/public/catalog", params={"hasAvailability": False})
+    assert r_avail_false.status_code == 200
+    assert len(r_avail_false.json()["data"]["items"]) == 0
+
+    # 4. Test educationStage
+    r_stage_all = await client.get("/api/public/catalog", params={"educationStage": "all"})
+    assert r_stage_all.status_code == 200
+    assert len(r_stage_all.json()["data"]["items"]) == 1
+
+    r_stage_nomatch = await client.get("/api/public/catalog", params={"educationStage": "university"})
+    assert r_stage_nomatch.status_code == 200
+    assert len(r_stage_nomatch.json()["data"]["items"]) == 0
+
 
