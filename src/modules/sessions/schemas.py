@@ -31,6 +31,8 @@ class SessionResponse(BaseModel):
     can_direct_reschedule: bool
     created_at: datetime
     updated_at: datetime
+    # ── Sprint 9 ──────────────────────────────────────────────────────────────
+    my_attendance: Optional[dict] = None  # {status, markedAt, markedByName} — only for enrolled student/parent viewer
 
 
 class GenerateSessionsRequest(BaseModel):

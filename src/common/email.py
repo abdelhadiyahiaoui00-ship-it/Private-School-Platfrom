@@ -24,7 +24,7 @@ async def send_email(type: str, to: str, **kwargs) -> bool:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 settings.VERCEL_EMAIL_URL,
-                json={"type": type, "to": to, **kwargs},
+                json={"type": type, "to": to, "schoolName": settings.APP_NAME, **kwargs},
                 headers={"x-api-secret": settings.EMAIL_API_SECRET},
                 timeout=10.0,
             )

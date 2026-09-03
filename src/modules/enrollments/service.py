@@ -41,10 +41,10 @@ def _compute_is_overdue(
     hold_hours: int,
 ) -> tuple[bool, Optional[datetime]]:
     """
-    isOverdue: True only if pending + visitor_form + past hold window.
-    reservationExpiresAt: computed for pending visitor_form enrollments only.
+    isOverdue: True if pending + past hold window.
+    reservationExpiresAt: computed for all pending enrollments (Sprint 9 — source condition removed).
     """
-    if enrollment.status != "pending" or enrollment.source != "visitor_form":
+    if enrollment.status != "pending":  # Sprint 9: removed `or enrollment.source != "visitor_form"`
         return False, None
     from datetime import timedelta
     expires_at = enrollment.created_at + timedelta(hours=hold_hours)

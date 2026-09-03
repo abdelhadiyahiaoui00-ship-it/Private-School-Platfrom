@@ -34,6 +34,8 @@ class PublicGroupResponse(BaseModel):
     active_enrollments: int
     is_full: bool
     available_seats: int
+    # ── Sprint 9 ──────────────────────────────────────────────────────────────
+    level: Optional[dict] = None  # {educationStage, educationYear, levelScope, minAge, maxAge, universityLabel, levelRank}
 
 
 class PublicGroupDetailResponse(PublicGroupResponse):

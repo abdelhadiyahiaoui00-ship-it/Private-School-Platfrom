@@ -11,6 +11,7 @@ from src.modules.assignments.exceptions import (
     AssignmentGroupMismatch,
     AssignmentGroupsCrossClass,
     AssignmentNotEffectiveTeacher,
+    AssignmentNotEnrolled,
     AssignmentNotFound,
     AssignmentSessionScopeMultiGroupInvalid,
     StudentNotEnrolled,
@@ -36,9 +37,21 @@ class AssignmentService:
             await self._check_effective_teacher(a.group_id, actor_id)
         return await self._build(a)
 
-    async def list_assignments(self, actor_id: int, is_admin: bool, filters: dict, page: int, page_size: int) -> dict:
+    async def list_assignments(
+        self, actor_id: int, is_admin: bool, filters: dict, page: int, page_size: int,
+        actor: Optional[User] = None,  # ── Sprint 9
+    ) -> dict:
+        is_student_or_parent = actor is not None and actor.role in ("student", "parent")
+
         stmt = select(Assignment)
-        if not is_admin:
+
+        if is_student_or_parent:
+            # Sprint 9: scope to groups where actor has an active enrollment
+            active_group_ids = await self._get_student_active_group_ids(actor_id)
+            if not active_group_ids:
+                raise AssignmentNotEnrolled()
+            stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+        elif not is_admin:
             stmt = self._scope_to_teacher(stmt, actor_id)
 
         if search := filters.get("search"):
@@ -69,9 +82,28 @@ class AssignmentService:
 
         total = (await self.session.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
         result = await self.session.execute(stmt.offset((page - 1) * page_size).limit(page_size))
-        items = [await self._build(a) for a in result.scalars().all()]
-        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold)
+        assignments = result.scalars().all()
 
+        items = []
+        for a in assignments:
+            item = await self._build(a)
+            # ── Sprint 9: populate mySubmission for student/parent callers ─────
+            if is_student_or_parent:
+                sub = (await self.session.execute(
+                    select(AssignmentSubmission).where(
+                        and_(AssignmentSubmission.assignment_id == a.id, AssignmentSubmission.student_id == actor_id)
+                    )
+                )).scalar_one_or_none()
+                if sub:
+                    is_late = bool(a.due_date and sub.submitted_at > a.due_date)
+                    item["mySubmission"] = self._build_sub_dict(sub, is_late)
+                else:
+                    item["mySubmission"] = None
+            else:
+                item["mySubmission"] = None  # Not applicable for teacher/admin
+            items.append(item)
+
+        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold, actor=actor)
         return {"items": items, "pagination": build_pagination(page, page_size, total), "stats": stats}
 
     async def create_assignment(self, body, actor_id: int, is_admin: bool, ip: str = None) -> dict:
@@ -383,9 +415,26 @@ class AssignmentService:
         cfg = (await self.session.execute(select(SystemConfig).limit(1))).scalar_one_or_none()
         return cfg.assignment_due_soon_warning_hours if cfg else 24
 
-    async def _compute_stats(self, actor_id: int, is_admin: bool, now: datetime, soon: datetime) -> dict:
+    async def _get_student_active_group_ids(self, student_id: int) -> list[int]:
+        result = await self.session.execute(
+            select(Enrollment.group_id).where(
+                and_(
+                    Enrollment.student_id == student_id,
+                    Enrollment.status == "active",
+                )
+            )
+        )
+        return [r[0] for r in result.all()]
+
+    async def _compute_stats(self, actor_id: int, is_admin: bool, now: datetime, soon: datetime, actor: Optional[User] = None) -> dict:
         stmt = select(Assignment)
-        if not is_admin:
+        if actor and actor.role in ("student", "parent"):
+            active_group_ids = await self._get_student_active_group_ids(actor_id)
+            if active_group_ids:
+                stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+            else:
+                stmt = stmt.where(False)  # No groups = no stats
+        elif not is_admin:
             stmt = self._scope_to_teacher(stmt, actor_id)
         all_a = (await self.session.execute(stmt)).scalars().all()
         return {

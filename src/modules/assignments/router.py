@@ -12,6 +12,7 @@ from src.modules.assignments.schemas import (
 from src.modules.assignments.service import AssignmentService
 from src.modules.auth.dependencies import get_current_user, require_manage_sessions, require_role
 from src.modules.users.models import User
+from src.modules.assignments.exceptions import AssignmentNotEnrolled
 
 assignments_router = APIRouter(prefix="/assignments", tags=["Assignments"])
 submissions_router = APIRouter(prefix="/assignments", tags=["Submissions"])
@@ -66,7 +67,7 @@ async def delete_batch(
 # ─── GET /api/assignments ─────────────────────────────────────────────────────
 @assignments_router.get("", summary="List assignments")
 async def list_assignments(
-    actor: User = Depends(require_manage_sessions),
+    actor: User = Depends(get_current_user),  # Sprint 9: widened from require_manage_sessions
     svc: AssignmentService = Depends(get_svc),
     search: Optional[str] = Query(None),
     class_id: Optional[int] = Query(None, alias="classId"),
@@ -80,7 +81,7 @@ async def list_assignments(
 ):
     filters = {"search": search, "classId": class_id, "groupId": group_id, "batchId": batch_id,
                "dueStatus": due_status, "sortBy": sort_by, "sortOrder": sort_order}
-    return {"data": await svc.list_assignments(actor.id, _is_admin(actor), filters, page, page_size)}
+    return {"data": await svc.list_assignments(actor.id, _is_admin(actor), filters, page, page_size, actor=actor)}
 
 
 # ─── POST /api/assignments ────────────────────────────────────────────────────

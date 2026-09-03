@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from src.core.database import DBSessionDep
-from src.modules.auth.dependencies import require_manage_sessions
+from src.modules.auth.dependencies import get_current_user, require_manage_sessions
 from src.modules.sessions.schemas import (
     GenerateSessionsRequest, UpdateSessionRequest
 )
@@ -31,6 +31,7 @@ async def list_sessions(
     actor: User = Depends(require_manage_sessions),
     service: SessionService = Depends(get_session_service),
     group_id: Optional[int] = Query(None, alias="groupId"),
+    group_ids: Optional[list[int]] = Query(None, alias="groupIds"),  # ── Sprint 9
     branch_id: Optional[int] = Query(None, alias="branchId"),
     branch_ids_raw: Optional[str] = Query(None, alias="branchIds"),
     teacher_id: Optional[int] = Query(None, alias="teacherId"),
@@ -50,7 +51,7 @@ async def list_sessions(
             raise HTTPException(status_code=422, detail="branchIds must be comma-separated integers")
 
     result = await service.list_sessions({
-        "group_id": group_id, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
+        "group_id": group_id, "group_ids": group_ids, "branch_id": branch_id, "branch_ids": parsed_branch_ids,
         "teacher_id": teacher_id, "room": room,
         "from_date": date_from, "to_date": date_to, "status": status,
         "page": page, "page_size": page_size,
@@ -61,7 +62,7 @@ async def list_sessions(
 @router.get("/{session_id}", summary="Get session by ID")
 async def get_session(
     session_id: int,
-    actor: User = Depends(require_manage_sessions),
+    actor: User = Depends(get_current_user),  # ── Sprint 9: widened from require_manage_sessions
     service: SessionService = Depends(get_session_service),
 ):
     data = await service.get_session(session_id, actor)

@@ -41,3 +41,10 @@ class StudentNotEnrolled(AppException):
     status_code = 404
     code = "STUDENT_NOT_ENROLLED"
     message = "Student is not enrolled in this group"
+
+
+# ── Sprint 9 ──────────────────────────────────────────────────────────────────
+class AssignmentNotEnrolled(AppException):
+    status_code = 403
+    code = "ASSIGNMENT_NOT_ENROLLED"
+    message = "You are not enrolled in any group with assignments"

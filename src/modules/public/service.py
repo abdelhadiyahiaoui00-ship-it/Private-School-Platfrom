@@ -34,6 +34,19 @@ def _build_group_response(group: Group, active_enrollments: int) -> PublicGroupR
     teacher_obj = group.teacher or (cls.teacher if cls else None)
     available_seats = max(0, group.max_students - active_enrollments)
 
+    # ── Sprint 9: build level dict from class education fields ────────────────
+    level = None
+    if cls:
+        level = {
+            "educationStage": cls.education_stage,
+            "educationYear": cls.education_year,
+            "levelScope": cls.level_scope,
+            "minAge": cls.min_age,
+            "maxAge": cls.max_age,
+            "universityLabel": cls.university_label,
+            "levelRank": cls.level_rank,
+        }
+
     return PublicGroupResponse(
         id=group.id,
         name=group.name,
@@ -54,6 +67,7 @@ def _build_group_response(group: Group, active_enrollments: int) -> PublicGroupR
         active_enrollments=active_enrollments,
         is_full=active_enrollments >= group.max_students,
         available_seats=available_seats,
+        level=level,
     )
 
 

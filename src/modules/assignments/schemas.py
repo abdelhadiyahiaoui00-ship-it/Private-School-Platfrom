@@ -42,6 +42,8 @@ class AssignmentResponse(BaseModel):
     created_by_name: str
     created_at: datetime
     updated_at: datetime
+    # ── Sprint 9 ──────────────────────────────────────────────────────────────
+    my_submission: Optional[dict] = None  # SubmissionResponse shape — only for student/parent caller
 
 
 class AssignmentDetailResponse(AssignmentResponse):

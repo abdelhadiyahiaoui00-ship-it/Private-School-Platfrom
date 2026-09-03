@@ -30,6 +30,7 @@ class SessionRepository:
     async def get_all(
         self,
         group_id: Optional[int] = None,
+        group_ids: Optional[list[int]] = None,  # ── Sprint 9
         branch_id: Optional[int] = None,
         branch_ids: Optional[list[int]] = None,
         teacher_id: Optional[int] = None,
@@ -64,6 +65,8 @@ class SessionRepository:
             q = q.where(Session.branch_id.in_(effective_ids))
         if group_id:
             q = q.where(Session.group_id == group_id)
+        if group_ids:  # ── Sprint 9: filter to specific group IDs
+            q = q.where(Session.group_id.in_(group_ids))
         if teacher_id:
             q = q.where((Group.teacher_id == teacher_id) | (Class.teacher_id == teacher_id))
         if room:

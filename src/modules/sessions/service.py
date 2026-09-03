@@ -140,6 +140,7 @@ class SessionService:
                 
         sessions, total = await self._repo.get_all(
             group_id=params.get("group_id"),
+            group_ids=params.get("group_ids"),  # ── Sprint 9
             branch_id=branch_id,
             branch_ids=branch_ids,
             teacher_id=teacher_id,
@@ -183,6 +184,16 @@ class SessionService:
         sess = await self._repo.get_by_id(session_id)
         if not sess:
             raise SessionNotFound()
+
+        # ── Sprint 9: students/parents may read session detail ─────────────────
+        if actor.role in ("student", "parent"):
+            # No branch/teacher scope check for enrolled students — just return the session
+            response = _build_response(sess).model_dump(by_alias=True)
+            my_attendance = await self._get_my_attendance(sess, actor.id)
+            response["myAttendance"] = my_attendance
+            return response
+
+        # Existing access control for admin/teacher/owner/superAdmin
         branch_ids_scope = self._get_branch_scope(actor)
         if branch_ids_scope is not None and sess.branch_id not in branch_ids_scope:
             from src.core.exceptions import ForbiddenBranch
@@ -190,7 +201,51 @@ class SessionService:
         if actor.role == "teacher" and not await self._is_teacher_session(sess, actor):
             from src.core.exceptions import PermissionDenied
             raise PermissionDenied()
-        return _build_response(sess).model_dump(by_alias=True)
+
+        response = _build_response(sess).model_dump(by_alias=True)
+        response["myAttendance"] = None  # Not applicable for admin/teacher
+        return response
+
+    async def _get_my_attendance(self, sess: "Session", student_id: int) -> Optional[dict]:
+        """Fetch attendance for a student in this session, only if they hold an active enrollment."""
+        from sqlalchemy import and_
+        from src.modules.enrollments.models import Enrollment
+        from src.modules.attendance.models import Attendance
+
+        # Verify active enrollment in the session's group
+        enroll_result = await self._session.execute(
+            select(Enrollment).where(
+                and_(
+                    Enrollment.group_id == sess.group_id,
+                    Enrollment.student_id == student_id,
+                    Enrollment.status == "active",
+                )
+            )
+        )
+        if not enroll_result.scalar_one_or_none():
+            return None  # Not enrolled — no attendance data exposed
+
+        att_result = await self._session.execute(
+            select(Attendance).where(
+                and_(
+                    Attendance.session_id == sess.id,
+                    Attendance.student_id == student_id,
+                )
+            )
+        )
+        att = att_result.scalar_one_or_none()
+        if not att:
+            return None
+
+        marker_name = None
+        if att.marked_by and att.marker:
+            marker_name = f"{att.marker.first_name} {att.marker.last_name}"
+
+        return {
+            "status": att.status,
+            "markedAt": att.marked_at.isoformat() if att.marked_at else None,
+            "markedByName": marker_name,
+        }
 
     async def update_session(self, session_id: int, data: dict, actor: User, ip: Optional[str] = None) -> dict:
         sess = await self._repo.get_by_id(session_id)
