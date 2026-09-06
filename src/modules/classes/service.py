@@ -15,6 +15,7 @@ from src.modules.classes.schemas import (
     LevelTargetingSchema, TeacherBasic
 )
 from src.modules.users.models import User
+from src.common.commission_visibility import resolve_commission_visibility
 
 
 def _format_schedule_summary(schedule: list) -> str:
@@ -43,18 +44,20 @@ def _build_level(cls: Class) -> LevelTargetingSchema:
     )
 
 
-def _build_teacher(user) -> TeacherBasic:
+def _build_teacher(user, show_commission: bool) -> TeacherBasic:
     return TeacherBasic(
         id=user.id,
         first_name=user.first_name,
         last_name=user.last_name,
         avatar_url=user.avatar_url,
         default_commission_percent=float(user.default_commission_percent)
-        if user.default_commission_percent is not None else None,
+        if (show_commission and user.default_commission_percent is not None) else None,
     )
 
 
-def _build_response(cls: Class, groups_count: int = 0) -> ClassResponse:
+def _build_response(cls: Class, groups_count: int = 0, actor: Optional[User] = None) -> ClassResponse:
+    show_commission = resolve_commission_visibility(actor, context_teacher_id=cls.teacher_id)
+
     effective_commission = (
         float(cls.commission_percent) if cls.commission_percent is not None
         else (
@@ -70,12 +73,12 @@ def _build_response(cls: Class, groups_count: int = 0) -> ClassResponse:
         module_id=cls.module_id,
         module_name=cls.module.name if cls.module else "",
         module_color=cls.module.color if cls.module else None,
-        teacher=_build_teacher(cls.teacher),
+        teacher=_build_teacher(cls.teacher, show_commission),
         name=cls.name,
         period_start=cls.period_start,
         period_end=cls.period_end,
-        commission_percent=float(cls.commission_percent) if cls.commission_percent else None,
-        effective_commission_percent=effective_commission,
+        commission_percent=float(cls.commission_percent) if (show_commission and cls.commission_percent) else None,
+        effective_commission_percent=effective_commission if show_commission else None,
         level=_build_level(cls),
         status=cls.status,
         groups_count=groups_count,
@@ -127,7 +130,7 @@ class ClassService:
         items = []
         for cls in classes:
             cnt = await self._repo.get_groups_count(cls.id)
-            items.append(_build_response(cls, cnt).model_dump(by_alias=True))
+            items.append(_build_response(cls, cnt, actor=actor).model_dump(by_alias=True))
         return {
             "items": items,
             "pagination": build_pagination(params.get("page", 1), params.get("page_size", 20), total),
@@ -143,6 +146,8 @@ class ClassService:
             from src.core.exceptions import ForbiddenBranch
             raise ForbiddenBranch()
 
+        cnt = await self._repo.get_groups_count(cls.id)
+        res = _build_response(cls, cnt, actor=actor)
         groups_summary_rows = await self._repo.get_groups_summary(class_id)
         groups_summary = [
             GroupSummary(
@@ -154,7 +159,7 @@ class ClassService:
             for g in groups_summary_rows
         ]
         cnt = len(groups_summary_rows)
-        base = _build_response(cls, cnt)
+        base = _build_response(cls, cnt, actor=actor)
         detail = ClassDetailResponse(**base.model_dump(), groups_summary=groups_summary)
         return detail.model_dump(by_alias=True)
 

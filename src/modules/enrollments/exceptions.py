@@ -47,3 +47,30 @@ class CannotCancelActiveWithSubscription(AppException):
     status_code = 409
     code = "CANNOT_CANCEL_ACTIVE_WITH_SUBSCRIPTION"
     message = "Cannot cancel an active enrollment with an existing subscription. Cancel the subscription first."
+
+
+# ─── Transfer Exceptions (Sprint 10) ─────────────────────────────────────────
+
+class TransferSameGroup(AppException):
+    status_code = 422
+    code = "TRANSFER_SAME_GROUP"
+    message = "Target group is the same as the current group."
+
+
+class TransferTargetDifferentClass(AppException):
+    status_code = 422
+    code = "TRANSFER_TARGET_DIFFERENT_CLASS"
+    message = "Target group must belong to the same class."
+
+
+class TransferTargetFull(AppException):
+    status_code = 409
+    code = "TRANSFER_TARGET_FULL"
+    message = "Target group has no available seats."
+
+
+class TransferInvalidSourceStatus(AppException):
+    status_code = 409
+    code = "TRANSFER_INVALID_SOURCE_STATUS"
+    message = "Enrollment must be active or pending to transfer."
+

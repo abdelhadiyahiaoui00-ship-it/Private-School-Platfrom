@@ -44,9 +44,9 @@ class SubscriptionResponse(BaseModel):
     remaining_sessions: Optional[int] = None
     # Financial ledger snapshot
     price: float
-    commission_percent: float
-    commission_amount: float
-    net_amount: float
+    commission_percent: Optional[float] = None
+    commission_amount: Optional[float] = None
+    net_amount: Optional[float] = None
     # Computed read-time flags (never stored)
     is_expiring_soon: bool
     is_expired: bool

@@ -700,6 +700,65 @@ class UserService:
             "printedAt": datetime.now(timezone.utc).isoformat(),
         }
 
+    async def get_academic_summary(self, user_id: int, actor: User) -> dict:
+        """Get academic summary for the dashboard ViewUserDialog (Sprint 10)."""
+        user = await self._get_user(user_id)
+
+        if user.role == "student":
+            from src.modules.enrollments.models import Enrollment
+            from src.modules.enrollments.service import _build_enrollment_response, _get_hold_hours
+            from sqlalchemy import select
+            
+            # Fetch Enrollments
+            e_result = await self.session.execute(
+                select(Enrollment).where(Enrollment.student_id == user_id).order_by(Enrollment.created_at.desc())
+            )
+            enrolls = e_result.scalars().all()
+            hold_hours = await _get_hold_hours(self.session)
+            enrollments_out = []
+            for e in enrolls:
+                er = await _build_enrollment_response(e, self.session, hold_hours)
+                enrollments_out.append(er.model_dump(by_alias=True))
+                
+            # Fetch Subscriptions
+            from src.modules.subscriptions.service import SubscriptionService
+            from src.modules.subscriptions.models import Subscription
+            s_result = await self.session.execute(
+                select(Subscription).where(Subscription.student_id == user_id).order_by(Subscription.created_at.desc())
+            )
+            subs = s_result.scalars().all()
+            
+            # For each sub, we need to know if it's the latest for its enrollment to map response correctly
+            enroll_ids = [s.enrollment_id for s in subs]
+            sub_svc = SubscriptionService(self.session)
+            latest_map = await sub_svc.sub_repo.get_latest_subscription_ids(enroll_ids)
+            
+            subs_out = []
+            for s in subs:
+                is_latest = latest_map.get(s.enrollment_id) == s.id
+                subs_out.append(sub_svc._map_to_response(s, is_latest, actor=actor).model_dump(by_alias=True))
+
+            return {
+                "kind": "student",
+                "enrollments": enrollments_out,
+                "subscriptions": subs_out,
+            }
+
+        elif user.role == "teacher":
+            from src.modules.classes.service import ClassService
+            cls_svc = ClassService(self.session)
+            # Pass a dummy filters dict and rely on teacher_id
+            classes_dict = await cls_svc.list_classes({"teacher_id": user_id}, actor)
+            
+            return {
+                "kind": "teacher",
+                "classes": classes_dict["items"],
+                "substituteGroups": [],  # Placeholder for future expansion
+            }
+
+        else:
+            return {"kind": "none"}
+
 
 # ─── Auth session revocation helper ─────────────────────────────────────────
 

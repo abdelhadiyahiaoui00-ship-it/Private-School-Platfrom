@@ -86,5 +86,11 @@ class ErrorCode(str, Enum):
     SUBMISSION_NOT_FOUND = "SUBMISSION_NOT_FOUND"
     STUDENT_NOT_ENROLLED = "STUDENT_NOT_ENROLLED"
 
+    # ─── Transfers (Sprint 10) ────────────────────────────────────────────────
+    TRANSFER_TARGET_DIFFERENT_CLASS = "TRANSFER_TARGET_DIFFERENT_CLASS"
+    TRANSFER_TARGET_FULL = "TRANSFER_TARGET_FULL"
+    TRANSFER_INVALID_SOURCE_STATUS = "TRANSFER_INVALID_SOURCE_STATUS"
+    TRANSFER_SAME_GROUP = "TRANSFER_SAME_GROUP"
+
     # ─── Server ──────────────────────────────────────────────────────────────
     INTERNAL_ERROR = "INTERNAL_ERROR"

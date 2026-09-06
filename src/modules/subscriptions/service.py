@@ -7,6 +7,7 @@ from fastapi import HTTPException
 import logging
 
 from src.common.financial import compute_financials, resolve_effective_commission
+from src.common.commission_visibility import resolve_commission_visibility
 from src.common.pagination import build_pagination
 from src.modules.audit.service import log_action
 from src.modules.auth.dependencies import CurrentUser
@@ -59,7 +60,7 @@ class SubscriptionService:
         if latest_subs.get(sub.enrollment_id) != sub.id:
             is_latest = False
 
-        res = self._map_to_detail_response(sub, is_latest, enroll_source)
+        res = self._map_to_detail_response(sub, is_latest, enroll_source, actor=actor)
         return res.model_dump(by_alias=True)
 
     async def list_subscriptions(self, filters: dict, actor: User) -> dict:
@@ -88,7 +89,7 @@ class SubscriptionService:
         items = []
         for sub in subs:
             is_latest = latest_map.get(sub.enrollment_id) == sub.id
-            items.append(self._map_to_response(sub, is_latest).model_dump(by_alias=True))
+            items.append(self._map_to_response(sub, is_latest, actor=actor).model_dump(by_alias=True))
 
         stats = await self.sub_repo.get_stats(branch_ids_scope=branch_ids_scope)
 
@@ -215,10 +216,8 @@ class SubscriptionService:
             ip_address=ip,
         )
 
-        enroll = await self.enroll_repo.get_by_id(old_sub.enrollment_id)
-        enroll_source = enroll.source if enroll else "admin"
-
-        res = self._map_to_detail_response(new_sub, is_latest=True, enroll_source=enroll_source)
+        enrollment = await self.enroll_repo.get_by_id(old_sub.enrollment_id)
+        res = self._map_to_detail_response(new_sub, is_latest=True, enroll_source=enrollment.source if enrollment else "admin", actor=actor)
         return res.model_dump(by_alias=True)
 
     async def extend_subscription(self, sub_id: int, payload: dict, actor: User, ip: str = None) -> dict:
@@ -621,17 +620,25 @@ class SubscriptionService:
             return None
         return [b.branch_id for b in getattr(actor, "branch_links", [])]
 
-    def _map_to_response(self, sub: Subscription, is_latest: bool) -> SubscriptionResponse:
+    def _map_to_response(self, sub: Subscription, is_latest: bool, actor=None) -> SubscriptionResponse:
         today = date.today()
         is_expiring_soon = False
         is_expired = False
-        
+
         if sub.status == "active" and sub.end_date:
             if sub.end_date < today:
                 is_expired = True
             elif sub.end_date <= today + timedelta(days=3):
                 is_expiring_soon = True
-                
+
+        # Commission visibility (Sprint 10)
+        show_commission = resolve_commission_visibility(
+            actor, context_teacher_id=sub.teacher_id
+        )
+        teacher_default_commission = (
+            sub.teacher.default_commission_percent if sub.teacher else None
+        )
+
         return SubscriptionResponse(
             id=sub.id,
             enrollment_id=sub.enrollment_id,
@@ -657,7 +664,7 @@ class SubscriptionService:
                 "first_name": sub.teacher.first_name if sub.teacher else "",
                 "last_name": sub.teacher.last_name if sub.teacher else "",
                 "avatar_url": sub.teacher.avatar_url if sub.teacher else None,
-                "default_commission_percent": sub.teacher.default_commission_percent if sub.teacher else None,
+                "default_commission_percent": teacher_default_commission if show_commission else None,
             },
             type=sub.type,
             status=sub.status,
@@ -666,9 +673,9 @@ class SubscriptionService:
             total_sessions=sub.total_sessions,
             remaining_sessions=sub.remaining_sessions,
             price=sub.price,
-            commission_percent=sub.commission_percent,
-            commission_amount=sub.commission_amount,
-            net_amount=sub.net_amount,
+            commission_percent=float(sub.commission_percent) if show_commission and sub.commission_percent is not None else None,
+            commission_amount=float(sub.commission_amount) if show_commission and sub.commission_amount is not None else None,
+            net_amount=float(sub.net_amount) if show_commission and sub.net_amount is not None else None,
             is_expiring_soon=is_expiring_soon,
             is_expired=is_expired,
             is_latest_for_enrollment=is_latest,
@@ -680,8 +687,9 @@ class SubscriptionService:
             cancelled_reason=sub.cancelled_reason,
         )
 
-    def _map_to_detail_response(self, sub: Subscription, is_latest: bool, enroll_source: str) -> SubscriptionDetailResponse:
-        base = self._map_to_response(sub, is_latest)
+    def _map_to_detail_response(self, sub: Subscription, is_latest: bool, enroll_source: str, actor=None) -> SubscriptionDetailResponse:
+        base = self._map_to_response(sub, is_latest, actor=actor)
+        show_commission = resolve_commission_visibility(actor, context_teacher_id=sub.teacher_id)
         payment = None
         if sub.payment:
             payment = PaymentResponse(
@@ -702,16 +710,16 @@ class SubscriptionService:
                 amount=sub.payment.amount,
                 currency=sub.payment.currency,
                 method=sub.payment.method,
-                commission_percent=sub.payment.commission_percent,
-                commission_amount=sub.payment.commission_amount,
-                net_amount=sub.payment.net_amount,
+                commission_percent=float(sub.payment.commission_percent) if show_commission else None,
+                commission_amount=float(sub.payment.commission_amount) if show_commission else None,
+                net_amount=float(sub.payment.net_amount) if show_commission else None,
                 payment_type=sub.payment.payment_type,
                 recorded_by=sub.payment.recorded_by,
                 recorded_by_name=f"{sub.payment.recorder.first_name} {sub.payment.recorder.last_name}" if sub.payment.recorder else "",
                 recorded_at=sub.payment.recorded_at,
                 notes=sub.payment.notes,
             )
-            
+
         return SubscriptionDetailResponse(
             **base.model_dump(),
             payment=payment,

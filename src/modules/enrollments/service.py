@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, and_
 
 from src.common.enrollment_engine import decide_enrollment_status, promote_next_in_waitlist
 from src.common.pagination import build_pagination
@@ -10,6 +10,8 @@ from src.modules.audit.service import log_action
 from src.modules.enrollments.exceptions import (
     AlreadyEnrolled, CannotCancelActiveWithSubscription, EnrollmentNotFound,
     GroupFull, NotLinkedChild, ParentActionRequired,
+    TransferInvalidSourceStatus, TransferSameGroup,
+    TransferTargetDifferentClass, TransferTargetFull,
     VisitorRequestAlreadyResolved, VisitorRequestNotFound,
 )
 from src.modules.enrollments.models import Enrollment
@@ -834,7 +836,8 @@ class EnrollmentService:
 
         items = []
         for link, student in rows:
-            items.append(ChildBasicResponse(
+            summary = await self._build_child_summary(student.id)
+            child_dict = ChildBasicResponse(
                 id=student.id,
                 first_name=student.first_name,
                 last_name=student.last_name,
@@ -842,6 +845,392 @@ class EnrollmentService:
                 date_of_birth=student.date_of_birth,
                 relationship=link.relationship,
                 link_id=link.id,
-            ).model_dump(by_alias=True))
+                summary=summary,
+            ).model_dump(by_alias=True)
+            items.append(child_dict)
 
         return items
+
+    async def _build_child_summary(self, student_id: int) -> dict:
+        """Build per-child aggregated summary for the parent portal (Sprint 10)."""
+        from datetime import timedelta
+        from src.modules.subscriptions.models import Subscription
+        from src.modules.sessions.models import Session
+
+        # Active enrollments count
+        stmt = select(func.count(Enrollment.id)).where(
+            and_(Enrollment.student_id == student_id, Enrollment.status == "active")
+        )
+        active_enrollments = (await self._session.execute(stmt)).scalar() or 0
+
+        # Active, non-expired subscriptions count
+        stmt = select(func.count(Subscription.id)).where(
+            and_(
+                Subscription.student_id == student_id,
+                Subscription.status == "active",
+            )
+        )
+        active_subscriptions = (await self._session.execute(stmt)).scalar() or 0
+
+        # Pending + waitlisted enrollments count
+        stmt = select(func.count(Enrollment.id)).where(
+            and_(
+                Enrollment.student_id == student_id,
+                Enrollment.status.in_(["pending", "waitlisted"]),
+            )
+        )
+        pending_enrollments = (await self._session.execute(stmt)).scalar() or 0
+
+        # Upcoming sessions in next 7 days across active enrollments
+        now = datetime.now(timezone.utc).date()
+        week_ahead = now + timedelta(days=7)
+
+        stmt = (
+            select(Session)
+            .join(Enrollment, Enrollment.group_id == Session.group_id)
+            .where(
+                and_(
+                    Enrollment.student_id == student_id,
+                    Enrollment.status == "active",
+                    Session.session_date >= now,
+                    Session.session_date <= week_ahead,
+                    Session.status != "cancelled",
+                )
+            )
+            .order_by(Session.session_date.asc(), Session.start_time.asc())
+        )
+        result = await self._session.execute(stmt)
+        upcoming = result.scalars().all()
+        upcoming_sessions_count = len(upcoming)
+        next_session_at = None
+        if upcoming:
+            first = upcoming[0]
+            from datetime import time as dtime
+            import datetime as dt
+            next_session_at = dt.datetime.combine(
+                first.session_date,
+                first.start_time,
+                tzinfo=timezone.utc,
+            ).isoformat()
+
+        # Distinct branch names for active enrollments
+        stmt = (
+            select(Group.class_id)
+            .join(Enrollment, Enrollment.group_id == Group.id)
+            .where(
+                and_(
+                    Enrollment.student_id == student_id,
+                    Enrollment.status == "active",
+                )
+            )
+            .distinct()
+        )
+        result = await self._session.execute(stmt)
+        class_ids = [r[0] for r in result.all()]
+
+        branch_names: list[str] = []
+        if class_ids:
+            from src.modules.classes.models import Class
+            from src.modules.branches.models import Branch
+            cls_result = await self._session.execute(
+                select(Class).where(Class.id.in_(class_ids))
+            )
+            classes = cls_result.scalars().all()
+            branch_id_set = {c.branch_id for c in classes}
+            for bid in branch_id_set:
+                br_result = await self._session.execute(
+                    select(Branch).where(Branch.id == bid)
+                )
+                br = br_result.scalar_one_or_none()
+                if br:
+                    branch_names.append(br.name)
+
+        return {
+            "activeEnrollmentsCount": active_enrollments,
+            "activeSubscriptionsCount": active_subscriptions,
+            "pendingEnrollmentsCount": pending_enrollments,
+            "upcomingSessionsCount": upcoming_sessions_count,
+            "nextSessionAt": next_session_at,
+            "branches": branch_names,
+        }
+
+    # ─── Group Transfer (Sprint 10) ───────────────────────────────────────────
+
+    async def _get_group(self, group_id: int) -> Optional[Group]:
+        result = await self._session.execute(select(Group).where(Group.id == group_id))
+        return result.scalar_one_or_none()
+
+    async def transfer_preview(
+        self,
+        enrollment_id: int,
+        target_group_id: int,
+    ) -> dict:
+        """Read-only preview — no side effects."""
+        result = await self._session.execute(
+            select(Enrollment).where(Enrollment.id == enrollment_id)
+        )
+        enrollment = result.scalar_one_or_none()
+        if not enrollment:
+            raise EnrollmentNotFound()
+
+        if enrollment.group_id == target_group_id:
+            raise TransferSameGroup()
+
+        target_group = await self._get_group(target_group_id)
+        if not target_group:
+            from src.core.exceptions import ResourceNotFound
+            raise ResourceNotFound(message="Target group not found.")
+
+        source_group = enrollment.group
+        if source_group.class_id != target_group.class_id:
+            raise TransferTargetDifferentClass()
+
+        # Build target group preview
+        teacher = target_group.teacher
+        teacher_name = f"{teacher.first_name} {teacher.last_name}" if teacher else ""
+        active_enrollments_count = await self._repo.count_active_enrollments(target_group_id)
+        available_seats = max(0, target_group.max_students - active_enrollments_count)
+
+        target_preview = {
+            "id": target_group.id,
+            "name": target_group.name,
+            "availableSeats": available_seats,
+            "room": target_group.room,
+            "teacherName": teacher_name,
+            "schedule": target_group.schedule,
+        }
+
+        if enrollment.status == "active":
+            if available_seats <= 0:
+                return {
+                    "mode": "active_transfer",
+                    "eligible": False,
+                    "reason": "TRANSFER_TARGET_FULL",
+                    "targetGroup": target_preview,
+                    "preservedSubscriptionId": None,
+                    "resultingStatus": None,
+                    "resultingWaitlistPosition": None,
+                }
+
+            # Find subscription to report preserved id
+            from src.modules.subscriptions.models import Subscription
+            sub_result = await self._session.execute(
+                select(Subscription).where(
+                    and_(
+                        Subscription.student_id == enrollment.student_id,
+                        Subscription.group_id == enrollment.group_id,
+                        Subscription.status == "active",
+                    )
+                ).order_by(Subscription.created_at.desc())
+            )
+            subscription = sub_result.scalar_one_or_none()
+
+            return {
+                "mode": "active_transfer",
+                "eligible": True,
+                "reason": None,
+                "targetGroup": target_preview,
+                "preservedSubscriptionId": subscription.id if subscription else None,
+                "resultingStatus": None,
+                "resultingWaitlistPosition": None,
+            }
+
+        elif enrollment.status == "pending":
+            status, waitlist_position = await decide_enrollment_status(self._session, target_group)
+            return {
+                "mode": "pending_reenroll",
+                "eligible": True,
+                "reason": None,
+                "targetGroup": target_preview,
+                "preservedSubscriptionId": None,
+                "resultingStatus": status,
+                "resultingWaitlistPosition": waitlist_position,
+            }
+
+        else:
+            raise TransferInvalidSourceStatus()
+
+    async def transfer_group(
+        self,
+        enrollment_id: int,
+        target_group_id: int,
+        actor_id: int,
+        is_admin: bool,
+        actor_ip: Optional[str] = None,
+    ) -> dict:
+        """Transfer student to a different group in the same class. Zero-migration."""
+        result = await self._session.execute(
+            select(Enrollment).where(Enrollment.id == enrollment_id)
+        )
+        enrollment = result.scalar_one_or_none()
+        if not enrollment:
+            raise EnrollmentNotFound()
+
+        if enrollment.group_id == target_group_id:
+            raise TransferSameGroup()
+
+        target_group = await self._get_group(target_group_id)
+        if not target_group:
+            from src.core.exceptions import ResourceNotFound
+            raise ResourceNotFound(message="Target group not found.")
+
+        source_group = enrollment.group
+        if source_group.class_id != target_group.class_id:
+            raise TransferTargetDifferentClass()
+
+        source_fifo_promoted_count = 0
+        updated_subscription = None
+        old_group_id = enrollment.group_id
+
+        if enrollment.status == "active":
+            # ── Active path: financial preservation ──────────────────────────
+            active_count = await self._repo.count_active_enrollments(target_group_id)
+            available_seats = max(0, target_group.max_students - active_count)
+            if available_seats <= 0:
+                raise TransferTargetFull()
+
+            # Find the active subscription to re-point
+            from src.modules.subscriptions.models import Subscription
+            from src.modules.payments.models import Payment
+
+            sub_result = await self._session.execute(
+                select(Subscription).where(
+                    and_(
+                        Subscription.student_id == enrollment.student_id,
+                        Subscription.group_id == old_group_id,
+                        Subscription.status == "active",
+                    )
+                ).order_by(Subscription.created_at.desc())
+            )
+            subscription = sub_result.scalar_one_or_none()
+
+            # Re-point enrollment
+            enrollment.group_id = target_group_id
+
+            # Re-point subscription's group FK (amounts/commission/dates untouched)
+            if subscription:
+                subscription.group_id = target_group_id
+                updated_subscription = subscription
+
+                # Re-point all non-cancelled payments' group FK for traceability
+                pay_result = await self._session.execute(
+                    select(Payment).where(
+                        and_(
+                            Payment.subscription_id == subscription.id,
+                            Payment.status != "cancelled",
+                        )
+                    )
+                )
+                for payment in pay_result.scalars().all():
+                    pass  # Payment has no group_id column — only subscription.group_id re-pointed
+
+            await self._session.flush()
+
+            # Source FIFO: run promotion but enrollment stays active (no cancel wrapper)
+            promoted = await promote_next_in_waitlist(
+                self._session, old_group_id, actor_user_id=actor_id
+            )
+            source_fifo_promoted_count = 1 if promoted else 0
+
+            # Audit: enrollment transfer
+            await log_action(
+                self._session,
+                user_id=actor_id,
+                action="ENROLLMENT_GROUP_TRANSFERRED",
+                category="enrollments",
+                entity_type="enrollment",
+                entity_id=enrollment.id,
+                metadata={
+                    "studentId": enrollment.student_id,
+                    "sourceGroupId": old_group_id,
+                    "targetGroupId": target_group_id,
+                    "path": "active",
+                },
+                ip_address=actor_ip,
+            )
+
+            if updated_subscription:
+                await log_action(
+                    self._session,
+                    user_id=actor_id,
+                    action="SUBSCRIPTION_GROUP_TRANSFERRED",
+                    category="subscriptions",
+                    entity_type="subscription",
+                    entity_id=updated_subscription.id,
+                    metadata={
+                        "sourceGroupId": old_group_id,
+                        "targetGroupId": target_group_id,
+                        "preservedPrice": float(updated_subscription.price),
+                    },
+                    ip_address=actor_ip,
+                )
+
+        elif enrollment.status == "pending":
+            # ── Pending path: capacity re-decision ───────────────────────────
+            status, waitlist_position = await decide_enrollment_status(self._session, target_group)
+
+            enrollment.group_id = target_group_id
+            enrollment.status = status
+            enrollment.waitlist_position = waitlist_position
+
+            await self._session.flush()
+
+            # Source FIFO promotion
+            promoted = await promote_next_in_waitlist(
+                self._session, old_group_id, actor_user_id=actor_id
+            )
+            source_fifo_promoted_count = 1 if promoted else 0
+
+            await log_action(
+                self._session,
+                user_id=actor_id,
+                action="ENROLLMENT_GROUP_TRANSFERRED",
+                category="enrollments",
+                entity_type="enrollment",
+                entity_id=enrollment.id,
+                metadata={
+                    "studentId": enrollment.student_id,
+                    "sourceGroupId": old_group_id,
+                    "targetGroupId": target_group_id,
+                    "path": "pending",
+                    "newStatus": status,
+                },
+                ip_address=actor_ip,
+            )
+
+        else:
+            raise TransferInvalidSourceStatus()
+
+        await self._session.commit()
+
+        # Notification to student
+        if enrollment.student_id:
+            await create_notification(
+                self._session,
+                user_id=enrollment.student_id,
+                type="enrollment_group_transferred",
+                title="تم نقل التسجيل",
+                message=f"تم نقلك من {source_group.name} إلى {target_group.name}",
+                entity_type="enrollment",
+                entity_id=enrollment.id,
+            )
+
+        # Build response
+        hold_hours = await _get_hold_hours(self._session)
+        enrollment_response = await _build_enrollment_response(enrollment, self._session, hold_hours)
+
+        subscription_dict = None
+        if updated_subscription:
+            from src.modules.subscriptions.service import SubscriptionService
+            sub_svc = SubscriptionService(self._session)
+            subscription_dict = sub_svc._map_to_response(
+                updated_subscription,
+                is_latest=True,
+                actor=None,  # commission suppressed for now; caller can re-fetch with actor
+            ).model_dump(by_alias=True)
+
+        return {
+            "enrollment": enrollment_response.model_dump(by_alias=True),
+            "subscription": subscription_dict,
+            "sourceGroupFIFOPromotedCount": source_fifo_promoted_count,
+        }

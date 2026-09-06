@@ -45,7 +45,7 @@ class ClassResponse(BaseModel):
     period_start: Optional[date] = None
     period_end: Optional[date] = None
     commission_percent: Optional[float] = None
-    effective_commission_percent: float
+    effective_commission_percent: Optional[float] = None
     level: LevelTargetingSchema
     status: str
     groups_count: int

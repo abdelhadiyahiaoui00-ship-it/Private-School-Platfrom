@@ -136,6 +136,18 @@ async def get_user(
     return {"data": user.model_dump(by_alias=True)}
 
 
+# ─── Academic Summary (Sprint 10) ─────────────────────────────────────────────
+
+@router.get("/{user_id}/academic-summary", summary="Get academic summary")
+async def get_academic_summary(
+    user_id: int,
+    actor: User = Depends(require_manage_users),
+    service: UserService = Depends(get_user_service),
+):
+    data = await service.get_academic_summary(user_id, actor)
+    return {"data": data}
+
+
 # ─── Update ───────────────────────────────────────────────────────────────────
 
 @router.patch("/{user_id}", summary="Update user")

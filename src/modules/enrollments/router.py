@@ -10,6 +10,7 @@ from src.modules.enrollments.schemas import (
     RejectVisitorRequest,
     CreateEnrollmentRequest,
     CancelEnrollmentRequest,
+    TransferGroupRequest,
 )
 from src.modules.subscriptions.schemas import ConfirmPaymentRequest
 from src.modules.subscriptions.service import SubscriptionService
@@ -120,6 +121,36 @@ async def list_enrollments(
         "sort_by": sort_by, "sort_order": sort_order,
     }, actor)
     return {"data": result}
+
+
+# ─── Transfer Endpoints (Sprint 10) ──────────────────────────────────────────
+
+@router.get("/{enrollment_id}/transfer-preview", summary="Preview group transfer")
+async def transfer_preview(
+    enrollment_id: int,
+    target_group_id: int = Query(..., alias="targetGroupId"),
+    actor: User = Depends(require_manage_enrollments),
+    service: EnrollmentService = Depends(get_service),
+):
+    data = await service.transfer_preview(enrollment_id, target_group_id)
+    return {"data": data}
+
+
+@router.post("/{enrollment_id}/transfer-group", summary="Transfer to different group")
+async def transfer_group(
+    enrollment_id: int,
+    body: TransferGroupRequest,
+    request: Request,
+    actor: User = Depends(require_manage_enrollments),
+    service: EnrollmentService = Depends(get_service),
+):
+    ip = request.client.host if request.client else None
+    is_admin = actor.role in ("owner", "superAdmin", "admin")
+    data = await service.transfer_group(
+        enrollment_id, body.target_group_id, actor.id, is_admin, actor_ip=ip
+    )
+    return {"data": data}
+
 
 
 @router.get("/{enrollment_id}", summary="Get enrollment detail")

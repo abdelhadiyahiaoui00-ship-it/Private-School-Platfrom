@@ -201,3 +201,23 @@ class PrintInfoResponse(BaseModel):
     temporary_password: Optional[str]
     school_name: str
     printed_at: datetime
+
+
+# ─── Academic Summary (Sprint 10) ─────────────────────────────────────────────
+
+class AcademicSummaryStudent(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    kind: str = "student"
+    enrollments: list[dict]
+    subscriptions: list[dict]
+
+
+class AcademicSummaryTeacher(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    kind: str = "teacher"
+    classes: list[dict]
+    substitute_groups: list[dict]
+
+
+class AcademicSummaryNone(BaseModel):
+    kind: str = "none"

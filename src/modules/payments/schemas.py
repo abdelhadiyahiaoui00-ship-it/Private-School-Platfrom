@@ -25,9 +25,9 @@ class PaymentResponse(BaseModel):
     amount: float
     currency: str
     method: str
-    commission_percent: float
-    commission_amount: float
-    net_amount: float
+    commission_percent: Optional[float] = None
+    commission_amount: Optional[float] = None
+    net_amount: Optional[float] = None
     payment_type: str                  # 'initial' | 'renewal'
     recorded_by: int
     recorded_by_name: str

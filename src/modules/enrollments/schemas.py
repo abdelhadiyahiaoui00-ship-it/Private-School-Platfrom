@@ -88,6 +88,30 @@ class ChildBasicResponse(BaseModel):
     date_of_birth: Optional[date] = None
     relationship: str
     link_id: int
+    summary: Optional[dict] = None  # Sprint 10: per-child aggregated summary
+
+
+class TransferPreviewResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    mode: str  # "active_transfer" | "pending_reenroll"
+    eligible: bool
+    reason: Optional[str] = None  # error code if not eligible
+    target_group: dict
+    preserved_subscription_id: Optional[int] = None  # active-path only
+    resulting_status: Optional[str] = None  # pending-path only
+    resulting_waitlist_position: Optional[int] = None  # pending-path only
+
+
+class TransferGroupRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    target_group_id: int
+
+
+class TransferGroupResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    enrollment: EnrollmentResponse
+    subscription: Optional[dict] = None  # present on active-path only
+    source_group_fifo_promoted_count: int
 
 
 class CreateVisitorReservationRequest(BaseModel):
