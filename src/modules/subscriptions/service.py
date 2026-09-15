@@ -575,6 +575,62 @@ class SubscriptionService:
             ip_address=ip,
         )
 
+        # ── Sprint 11: email notifications ────────────────────────────────────
+        from src.modules.notifications.service import send_email_notification, create_notification
+        from src.modules.notifications.models import Notification as _N  # noqa
+
+        # In-app: enrollment approved
+        await create_notification(
+            self.session,
+            user_id=student_id,
+            type="enrollment_approved",
+            title="تم قبول تسجيلك وتفعيل الاشتراك",
+            message=f"تم الدفع وتفعيل تسجيلك في {cls.name if cls else ''}",
+            entity_type="enrollment",
+            entity_id=enroll.id,
+        )
+
+        # Email: enrollment_approved (async, swallows errors)
+        class_name = cls.name if cls else ""
+        group_name = group.name if group else ""
+        student_user = await self.user_repo.get_by_id(student_id)
+        first_name = student_user.first_name if student_user else ""
+        schedule_text = ""
+        if group and group.schedule:
+            schedule_text = ", ".join(
+                f"{s.get('day','')} {s.get('startTime','')}" for s in group.schedule
+            )
+        await send_email_notification(
+            self.session,
+            user_id=student_id,
+            notification_type="enrollment_approved",
+            template_vars={
+                "schoolName": "Académie Al-Nour",
+                "firstName": first_name,
+                "className": class_name,
+                "groupName": group_name,
+                "schedule": schedule_text,
+                "price": str(float(amount)),
+                "dashboardLink": f"{settings.FRONTEND_URL}/dashboard/my-enrollments",
+            },
+        )
+
+        # Email: payment_confirmed
+        await send_email_notification(
+            self.session,
+            user_id=student_id,
+            notification_type="payment_confirmed",
+            template_vars={
+                "schoolName": "Académie Al-Nour",
+                "firstName": first_name,
+                "amount": str(float(amount)),
+                "method": payload.get("method", "cash"),
+                "paymentDate": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "className": class_name,
+                "dashboardLink": f"{settings.FRONTEND_URL}/dashboard/my-subscriptions",
+            },
+        )
+
         from src.modules.enrollments.service import _build_enrollment_response, _get_hold_hours
         hold_hours = await _get_hold_hours(self.session)
         enroll_res = await _build_enrollment_response(enroll, self.session, hold_hours)

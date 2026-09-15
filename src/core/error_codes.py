@@ -92,5 +92,8 @@ class ErrorCode(str, Enum):
     TRANSFER_INVALID_SOURCE_STATUS = "TRANSFER_INVALID_SOURCE_STATUS"
     TRANSFER_SAME_GROUP = "TRANSFER_SAME_GROUP"
 
+    # ─── Notifications (Sprint 11) ───────────────────────────────────────────
+    NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND"
+
     # ─── Server ──────────────────────────────────────────────────────────────
     INTERNAL_ERROR = "INTERNAL_ERROR"

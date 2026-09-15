@@ -6,6 +6,7 @@ from sqlalchemy import select, func, and_
 
 from src.common.enrollment_engine import decide_enrollment_status, promote_next_in_waitlist
 from src.common.pagination import build_pagination
+from src.core.config import settings
 from src.modules.audit.service import log_action
 from src.modules.enrollments.exceptions import (
     AlreadyEnrolled, CannotCancelActiveWithSubscription, EnrollmentNotFound,
@@ -818,6 +819,47 @@ class EnrollmentService:
             ip_address=ip,
         )
 
+        # Sprint 11: email notification for enrollment_rejected
+        if enrollment.student_id:
+            from src.modules.notifications.service import send_email_notification, create_notification
+            from src.modules.groups.models import Group as _G
+            from src.modules.classes.models import Class as _C
+            grp_result = await self._session.execute(
+                select(_G).where(_G.id == enrollment.group_id)
+            )
+            grp = grp_result.scalar_one_or_none()
+            cls_result = await self._session.execute(
+                select(_C).where(_C.id == grp.class_id)
+            ) if grp else None
+            cls = (await cls_result).scalar_one_or_none() if cls_result else None
+            class_name = cls.name if cls else ""
+            from src.modules.users.models import User as _U
+            stu_result = await self._session.execute(
+                select(_U).where(_U.id == enrollment.student_id)
+            )
+            stu = stu_result.scalar_one_or_none()
+            await create_notification(
+                self._session,
+                user_id=enrollment.student_id,
+                type="enrollment_rejected",
+                title="لم يتم قبول طلب التسجيل",
+                message=f"تم رفض طلبك في {class_name}",
+                entity_type="enrollment",
+                entity_id=enrollment.id,
+            )
+            await send_email_notification(
+                self._session,
+                user_id=enrollment.student_id,
+                notification_type="enrollment_rejected",
+                template_vars={
+                    "schoolName": "Académie Al-Nour",
+                    "firstName": stu.first_name if stu else "",
+                    "className": class_name,
+                    "reason": reason or "",
+                    "catalogLink": f"{settings.FRONTEND_URL}/catalog",
+                },
+            )
+
     # ─── My Children (parent) ─────────────────────────────────────────────────
 
     async def get_my_children(self, actor: User) -> list[dict]:
@@ -1213,6 +1255,29 @@ class EnrollmentService:
                 message=f"تم نقلك من {source_group.name} إلى {target_group.name}",
                 entity_type="enrollment",
                 entity_id=enrollment.id,
+            )
+            # Sprint 11: email
+            from src.modules.notifications.service import send_email_notification
+            target_schedule = ", ".join(
+                f"{s.get('day','')} {s.get('startTime','')}"
+                for s in (target_group.schedule or [])
+            )
+            stu_result = await self._session.execute(
+                select(User).where(User.id == enrollment.student_id)
+            )
+            stu = stu_result.scalar_one_or_none()
+            await send_email_notification(
+                self._session,
+                user_id=enrollment.student_id,
+                notification_type="enrollment_group_transferred",
+                template_vars={
+                    "schoolName": "Académie Al-Nour",
+                    "firstName": stu.first_name if stu else "",
+                    "sourceGroupName": source_group.name,
+                    "targetGroupName": target_group.name,
+                    "newSchedule": target_schedule or "—",
+                    "dashboardLink": f"{settings.FRONTEND_URL}/dashboard/my-enrollments",
+                },
             )
 
         # Build response

@@ -296,6 +296,56 @@ class AssignmentService:
         await log_action(self.session, actor_id, "ASSIGNMENT_SUBMITTED", "assignments",
                          "assignment_submission", sub.id,
                          metadata={"assignmentId": assignment_id, "isLate": is_late}, ip_address=ip)
+
+        # Sprint 11: notify teacher by email
+        try:
+            from src.modules.notifications.service import send_email_notification, create_notification
+            from src.core.config import settings
+
+            # Resolve teacher (the group's effective teacher)
+            teacher_id = a.group.teacher_id if a.group else None
+            # Build student full name from DB
+            stu_result = await self.session.execute(
+                select(User).where(User.id == student_id)
+            )
+            stu = stu_result.scalar_one_or_none()
+            student_name = f"{stu.first_name} {stu.last_name}" if stu else str(student_id)
+
+            if teacher_id:
+                teacher_result = await self.session.execute(
+                    select(User).where(User.id == teacher_id)
+                )
+                teacher = teacher_result.scalar_one_or_none()
+                teacher_name = f"{teacher.first_name} {teacher.last_name}" if teacher else ""
+                class_name = a.group.class_.name if (a.group and a.group.class_) else ""
+
+                await create_notification(
+                    self.session,
+                    user_id=teacher_id,
+                    type="assignment_submitted",
+                    title=f"تسليم واجب: {a.title}",
+                    message=f"قام {student_name} بتسليم واجب '{a.title}'",
+                    entity_type="session",
+                    entity_id=a.session_id,
+                )
+                await send_email_notification(
+                    self.session,
+                    user_id=teacher_id,
+                    notification_type="assignment_submitted",
+                    template_vars={
+                        "schoolName": "Académie Al-Nour",
+                        "teacherName": teacher_name,
+                        "studentName": student_name,
+                        "assignmentTitle": a.title,
+                        "className": class_name,
+                        "submissionDate": now.strftime("%Y-%m-%d %H:%M"),
+                        "dashboardLink": f"{settings.FRONTEND_URL}/dashboard/sessions/{a.session_id or ''}",
+                    },
+                )
+        except Exception as _email_exc:
+            import logging
+            logging.getLogger(__name__).warning("assignment email failed: %s", _email_exc)
+
         return self._build_sub_dict(sub, is_late)
 
     async def get_my_submissions(self, student_id: int, page: int, page_size: int) -> dict:
