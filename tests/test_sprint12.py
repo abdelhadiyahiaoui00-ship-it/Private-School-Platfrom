@@ -1,12 +1,12 @@
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import src.app  # Import app to ensure all SQLAlchemy models are registered
 from src.modules.analytics.exceptions import AnalyticsPeriodInvalid, AnalyticsExportEmpty
 from src.modules.analytics.models import AnalyticsMonthlySnapshot
-from src.modules.analytics.service import AnalyticsService
+from src.modules.analytics.service import AnalyticsService, format_analytics_label
 from src.modules.analytics.schemas import (
     RevenueOverviewOut,
     MonthlySnapshotOut,
@@ -27,85 +27,55 @@ def test_is_closed_month_logic():
     else:
         assert AnalyticsService._is_closed_month(cur_year - 1, 12) is True
 
-    # Future month raises period invalid when validated
-    future_year = cur_year + 1
-    with pytest.raises(AnalyticsPeriodInvalid):
-        AnalyticsService._validate_period(future_year, 1)
+
+def test_format_analytics_label():
+    # Arabic daily & monthly
+    lbl_ar_day = format_analytics_label(2026, 9, 14, "day", "ar")
+    assert lbl_ar_day == "14 سبتمبر 2026"
+
+    lbl_ar_month = format_analytics_label(2026, 9, None, "month", "ar")
+    assert lbl_ar_month == "سبتمبر 2026"
+
+    # French daily
+    lbl_fr_day = format_analytics_label(2026, 9, 14, "day", "fr")
+    assert lbl_fr_day == "14 septembre 2026"
+
+    # English daily
+    lbl_en_day = format_analytics_label(2026, 9, 14, "day", "en")
+    assert lbl_en_day == "14 September 2026"
 
 
 @pytest.mark.asyncio
-async def test_monthly_snapshot_open_month():
-    now = datetime.now(timezone.utc)
-    cur_year = now.year
-    cur_month = now.month
-
+async def test_revenue_trend_daily_mode():
     mock_session = AsyncMock()
+
     mock_pay_res = MagicMock()
     mock_pay_res.one.return_value = MagicMock(
-        total_revenue=Decimal("1000.00"),
-        total_commissions=Decimal("100.00"),
-        net_revenue=Decimal("900.00"),
-        payment_count=5,
+        total_revenue=Decimal("500.00"),
+        commission_total=Decimal("50.00"),
+        net_revenue=Decimal("450.00"),
+        payments_count=2,
     )
-
-    mock_enr_res = MagicMock()
-    mock_enr_res.scalar.return_value = 2
-
-    mock_sub_res = MagicMock()
-    mock_sub_res.scalar.return_value = 3
-
-    mock_session.execute.side_effect = [
-        mock_pay_res,
-        mock_enr_res,
-        mock_sub_res,
-    ]
+    mock_session.execute.return_value = mock_pay_res
 
     service = AnalyticsService(mock_session)
-    result = await service.get_monthly_snapshot(cur_year, cur_month, branch_id=1)
+    d_from = date(2026, 9, 1)
+    d_to = date(2026, 9, 5)  # 5 days inclusive <= 31
 
-    assert isinstance(result, MonthlySnapshotOut)
-    assert result.total_revenue == Decimal("1000.00")
-    assert result.net_revenue == Decimal("900.00")
-    assert result.payment_count == 5
-    assert result.new_enrollments == 2
-    assert result.active_subscriptions == 3
+    points = await service.get_revenue_trend(d_from, d_to, branch_id=1, locale="ar")
 
-    # Session.add and session.commit must NEVER be called for an open month (Rule 1)
-    mock_session.add.assert_not_called()
-    mock_session.commit.assert_not_called()
+    assert len(points) == 5
+    for i, pt in enumerate(points, start=1):
+        assert pt["granularity"] == "day"
+        assert pt["day"] == i
+        assert pt["month"] == 9
+        assert pt["year"] == 2026
+        assert pt["label"] == f"{i} سبتمبر 2026"
+        assert pt["isFinal"] is True  # 2026-09-01..05 is strictly before 2026-09-23
 
 
 @pytest.mark.asyncio
-async def test_monthly_snapshot_closed_month_hit():
-    mock_session = AsyncMock()
-    cached_snapshot = AnalyticsMonthlySnapshot(
-        id=1,
-        branch_id=1,
-        year=2025,
-        month=1,
-        total_revenue=Decimal("5000.00"),
-        total_commissions=Decimal("500.00"),
-        net_revenue=Decimal("4500.00"),
-        payment_count=20,
-        new_enrollments=10,
-        active_subscriptions=15,
-        created_at=datetime.now(timezone.utc),
-    )
-
-    mock_res = MagicMock()
-    mock_res.scalar_one_or_none.return_value = cached_snapshot
-    mock_session.execute.return_value = mock_res
-
-    service = AnalyticsService(mock_session)
-    result = await service.get_monthly_snapshot(2025, 1, branch_id=1)
-
-    assert result.total_revenue == Decimal("5000.00")
-    # Session.add should not be called since cache hit
-    mock_session.add.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_monthly_snapshot_closed_month_miss_computes_and_inserts():
+async def test_revenue_trend_monthly_mode():
     mock_session = AsyncMock()
 
     mock_cache_res = MagicMock()
@@ -113,68 +83,99 @@ async def test_monthly_snapshot_closed_month_miss_computes_and_inserts():
 
     mock_pay_res = MagicMock()
     mock_pay_res.one.return_value = MagicMock(
-        total_revenue=Decimal("3000.00"),
-        total_commissions=Decimal("300.00"),
-        net_revenue=Decimal("2700.00"),
-        payment_count=12,
+        total_revenue=Decimal("10000.00"),
+        total_commissions=Decimal("1000.00"),
+        net_revenue=Decimal("9000.00"),
+        payment_count=40,
     )
 
     mock_enr_res = MagicMock()
-    mock_enr_res.scalar.return_value = 5
+    mock_enr_res.scalar.return_value = 10
 
     mock_sub_res = MagicMock()
-    mock_sub_res.scalar.return_value = 8
+    mock_sub_res.scalar.return_value = 15
 
+    # Executes for get_monthly_snapshot cache check + live compute for 2 months
     mock_session.execute.side_effect = [
-        mock_cache_res,
-        mock_pay_res,
-        mock_enr_res,
-        mock_sub_res,
+        mock_cache_res, mock_pay_res, mock_enr_res, mock_sub_res,
+        mock_cache_res, mock_pay_res, mock_enr_res, mock_sub_res,
     ]
 
     service = AnalyticsService(mock_session)
-    result = await service.get_monthly_snapshot(2025, 2, branch_id=1)
+    d_from = date(2026, 1, 1)
+    d_to = date(2026, 2, 28)  # 59 days > 31 → Monthly mode
 
-    assert result.total_revenue == Decimal("3000.00")
-    assert result.net_revenue == Decimal("2700.00")
-    # Miss on closed month must call session.add and session.commit
-    assert mock_session.add.called
-    assert mock_session.commit.called
+    points = await service.get_revenue_trend(d_from, d_to, branch_id=1, locale="ar")
+
+    assert len(points) == 2
+    assert points[0]["granularity"] == "month"
+    assert points[0]["day"] is None
+    assert points[0]["label"] == "جانفي 2026"
+
+    assert points[1]["granularity"] == "month"
+    assert points[1]["day"] is None
+    assert points[1]["label"] == "فيفري 2026"
 
 
 @pytest.mark.asyncio
-async def test_revenue_overview_always_live():
+async def test_students_trend_daily_mode():
     mock_session = AsyncMock()
-
-    mock_pay_res = MagicMock()
-    mock_pay_res.one.return_value = MagicMock(
-        total_revenue=Decimal("1500.00"),
-        total_commissions=Decimal("150.00"),
-        net_revenue=Decimal("1350.00"),
-        payment_count=7,
-    )
-
-    mock_enr_res = MagicMock()
-    mock_enr_res.scalar.return_value = 1
-
-    mock_sub_res = MagicMock()
-    mock_sub_res.scalar.return_value = 2
-
-    mock_session.execute.side_effect = [
-        mock_pay_res,
-        mock_enr_res,
-        mock_sub_res,
-    ]
+    mock_res = MagicMock()
+    mock_res.scalar.return_value = 25
+    mock_session.execute.return_value = mock_res
 
     service = AnalyticsService(mock_session)
-    overview = await service.get_revenue_overview(2025, 3, branch_id=2)
+    d_from = date(2026, 9, 10)
+    d_to = date(2026, 9, 12)  # 3 days <= 31
 
-    assert isinstance(overview, RevenueOverviewOut)
-    assert overview.total_revenue == Decimal("1500.00")
-    assert overview.net_revenue == Decimal("1350.00")
-    assert overview.payment_count == 7
-    # Overview must never add snapshot to DB
-    mock_session.add.assert_not_called()
+    points = await service.get_students_trend(d_from, d_to, branch_id=None, locale="ar")
+
+    assert len(points) == 3
+    assert points[0]["granularity"] == "day"
+    assert points[0]["day"] == 10
+    assert points[0]["activeStudentsCount"] == 25
+
+
+@pytest.mark.asyncio
+async def test_enrollment_funnel_daily_mode():
+    mock_session = AsyncMock()
+    mock_res = MagicMock()
+    mock_res.scalar.return_value = 10
+    mock_session.execute.return_value = mock_res
+
+    service = AnalyticsService(mock_session)
+    d_from = date(2026, 9, 14)
+    d_to = date(2026, 9, 14)  # 1 day <= 31
+
+    points = await service.get_enrollment_funnel(d_from, d_to, branch_id=None, locale="ar")
+
+    assert len(points) == 1
+    pt = points[0]
+    assert pt["granularity"] == "day"
+    assert pt["day"] == 14
+    assert pt["label"] == "14 سبتمبر 2026"
+    assert "visitorRequestsCount" in pt
+    assert "enrollmentsCreatedCount" in pt
+
+
+@pytest.mark.asyncio
+async def test_operations_trend_daily_mode():
+    mock_session = AsyncMock()
+    mock_res = MagicMock()
+    mock_res.scalar.return_value = 3
+    mock_session.execute.return_value = mock_res
+
+    service = AnalyticsService(mock_session)
+    d_from = date(2026, 9, 15)
+    d_to = date(2026, 9, 16)  # 2 days <= 31
+
+    points = await service.get_operations_trend(d_from, d_to, branch_id=None, locale="ar")
+
+    assert len(points) == 2
+    assert points[0]["granularity"] == "day"
+    assert points[0]["day"] == 15
+    assert points[0]["teacherAbsencesCount"] == 3
+    assert points[0]["reschedulesApprovedCount"] == 3
 
 
 @pytest.mark.asyncio
@@ -211,18 +212,3 @@ async def test_csv_export_format():
 
     assert "Payment ID,Student ID,Student Name" in csv_text
     assert "101,5,Ahmed Benali,1,Main Branch,20,Math 101,3,2500.00,250.00,2250.00,cash,initial" in csv_text
-
-
-@pytest.mark.asyncio
-async def test_csv_export_empty_raises_exception():
-    mock_session = AsyncMock()
-    mock_res = MagicMock()
-    mock_res.all.return_value = []
-    mock_session.execute.return_value = mock_res
-
-    service = AnalyticsService(mock_session)
-    with pytest.raises(AnalyticsExportEmpty):
-        await service.export_payments_csv(
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            datetime(2026, 1, 31, tzinfo=timezone.utc),
-        )

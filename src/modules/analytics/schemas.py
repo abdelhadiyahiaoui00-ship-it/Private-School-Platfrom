@@ -1,13 +1,17 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, List, Optional, TypeVar, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
 
+class ItemsEnvelope(BaseModel, Generic[T]):
+    items: List[T]
+
+
 class ResponseWrapper(BaseModel, Generic[T]):
-    data: T
+    data: Union[ItemsEnvelope[T], T]
 
 
 class MonthlySnapshotOut(BaseModel):
@@ -61,12 +65,39 @@ class TopTeacherOut(BaseModel):
     payment_count: int
 
 
-class RevenueTrendPoint(BaseModel):
+class BaseTrendPoint(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    granularity: str = "month"  # "day" | "month"
+    day: Optional[int] = None   # 1-31 for day, None for month
+    is_final: bool = Field(True, alias="isFinal")
+    label: str
     year: int
     month: int
-    total_revenue: Decimal
-    net_revenue: Decimal
-    payment_count: int
+
+
+class RevenueTrendPoint(BaseTrendPoint):
+    total_revenue: Decimal = Field(..., alias="totalRevenue")
+    commission_total: Decimal = Field(Decimal("0.00"), alias="commissionTotal")
+    net_revenue: Decimal = Field(..., alias="netRevenue")
+    payment_count: int = Field(..., alias="paymentsCount")
+
+
+class StudentsTrendPoint(BaseTrendPoint):
+    active_students_count: int = Field(..., alias="activeStudentsCount")
+
+
+class EnrollmentFunnelPoint(BaseTrendPoint):
+    visitor_requests_count: int = Field(0, alias="visitorRequestsCount")
+    visitor_requests_converted_count: int = Field(0, alias="visitorRequestsConvertedCount")
+    enrollments_created_count: int = Field(0, alias="enrollmentsCreatedCount")
+    enrollments_active_count: int = Field(0, alias="enrollmentsActiveCount")
+    conversion_rate: float = Field(0.0, alias="conversionRate")
+
+
+class OperationsTrendPoint(BaseTrendPoint):
+    teacher_absences_count: int = Field(0, alias="teacherAbsencesCount")
+    reschedules_approved_count: int = Field(0, alias="reschedulesApprovedCount")
 
 
 class PaymentMethodBreakdownOut(BaseModel):
