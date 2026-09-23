@@ -95,5 +95,9 @@ class ErrorCode(str, Enum):
     # ─── Notifications (Sprint 11) ───────────────────────────────────────────
     NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND"
 
+    # ─── Analytics (Sprint 12) ────────────────────────────────────────────────────
+    ANALYTICS_PERIOD_INVALID = "ANALYTICS_PERIOD_INVALID"
+    ANALYTICS_EXPORT_EMPTY = "ANALYTICS_EXPORT_EMPTY"
+
     # ─── Server ──────────────────────────────────────────────────────────────
     INTERNAL_ERROR = "INTERNAL_ERROR"

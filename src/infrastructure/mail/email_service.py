@@ -24,6 +24,7 @@ _SUBJECTS: dict[str, dict[str, str]] = {
         "subscription_expired": "انتهى اشتراكك 🔴",
         "payment_confirmed": "تم تأكيد الدفع ✅",
         "assignment_submitted": "تم استلام واجب جديد 📝",
+        "assignment_due_soon": "تذكير: اقتراب موعد تسليم الواجب ⏰",
         "enrollment_group_transferred": "تم نقل تسجيلك 🔄",
     },
     "en": {
@@ -33,6 +34,7 @@ _SUBJECTS: dict[str, dict[str, str]] = {
         "subscription_expired": "Subscription Expired 🔴",
         "payment_confirmed": "Payment Confirmed ✅",
         "assignment_submitted": "Assignment Submitted 📝",
+        "assignment_due_soon": "Reminder: Assignment Due Soon ⏰",
         "enrollment_group_transferred": "Enrollment Transferred 🔄",
     },
     "fr": {
@@ -42,6 +44,7 @@ _SUBJECTS: dict[str, dict[str, str]] = {
         "subscription_expired": "Abonnement expiré 🔴",
         "payment_confirmed": "Paiement confirmé ✅",
         "assignment_submitted": "Devoir soumis 📝",
+        "assignment_due_soon": "Rappel : Devoir à rendre bientôt ⏰",
         "enrollment_group_transferred": "Inscription transférée 🔄",
     },
 }

@@ -53,3 +53,16 @@ async def mark_read(
     repo = NotificationRepository(session)
     await repo.mark_read(notification_id, actor.id)
     return {"data": {"read": True}}
+
+
+@router.post("/trigger-sweeps", summary="Trigger notification sweeps (Admin only)")
+async def trigger_notification_sweeps(
+    actor: CurrentUser,
+    session: DBSessionDep,
+):
+    from fastapi import HTTPException
+    from src.modules.notifications.scheduled_jobs import run_notification_sweeps
+    if actor.role not in ("admin", "superAdmin", "owner"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    results = await run_notification_sweeps(session)
+    return {"data": results}

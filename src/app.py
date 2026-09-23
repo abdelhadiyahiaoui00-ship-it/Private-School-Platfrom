@@ -45,6 +45,7 @@ from src.modules.assignments.router import (
     submissions_router,
     my_classes_router,
 )
+from src.modules.analytics.router import router as analytics_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -121,159 +122,19 @@ async def expire_overdue_visitor_reservations():
 
 async def scan_expiring_subscriptions():
     """
-    Runs hourly (Sprint 11).
-    - Sends `subscription_expiring` email+notification when end_date is within warning threshold.
-    - Sends `subscription_expired` email+notification when end_date has passed and status is still active.
-    Uses SystemConfig.subscription_expiring_warning_days (default 3).
-    Idempotent: checks for existing recent notification before firing.
+    Scheduled job (runs every hour via APScheduler):
+    Triggers notification sweeps for:
+      - subscription_expiring
+      - subscription_expired
+      - assignment_due_soon
     """
     from src.core.database import sessionmanager
-    from sqlalchemy import select, and_
-    from datetime import datetime, timezone, timedelta, date
-    from src.modules.subscriptions.models import Subscription
-    from src.modules.config.models import SystemConfig
-    from src.modules.notifications.models import Notification
-    from src.modules.notifications.service import create_notification, send_email_notification
-    from src.modules.users.models import User
+    from src.modules.notifications.scheduled_jobs import run_notification_sweeps
 
     async with sessionmanager.session() as db:
         try:
-            config_result = await db.execute(select(SystemConfig).limit(1))
-            config = config_result.scalar_one_or_none()
-            warning_days = getattr(config, "subscription_expiring_warning_days", 3) or 3
-
-            now = datetime.now(timezone.utc)
-            today = now.date()
-            threshold_date = today + timedelta(days=warning_days)
-
-            # ── Expiring soon ─────────────────────────────────────────────────
-            expiring_result = await db.execute(
-                select(Subscription).where(
-                    and_(
-                        Subscription.status == "active",
-                        Subscription.type == "monthly",
-                        Subscription.end_date != None,  # noqa: E711
-                        Subscription.end_date <= threshold_date,
-                        Subscription.end_date >= today,
-                    )
-                )
-            )
-            expiring_subs = expiring_result.scalars().all()
-
-            for sub in expiring_subs:
-                student_id = sub.student_id
-                if not student_id:
-                    continue
-                # Idempotent: skip if we already sent a `subscription_expiring` notif today
-                recent_check = await db.execute(
-                    select(Notification).where(
-                        and_(
-                            Notification.user_id == student_id,
-                            Notification.type == "subscription_expiring",
-                            Notification.entity_id == sub.id,
-                            Notification.created_at >= datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc),
-                        )
-                    ).limit(1)
-                )
-                if recent_check.scalar_one_or_none():
-                    continue  # Already notified today
-
-                stu_result = await db.execute(select(User).where(User.id == student_id))
-                stu = stu_result.scalar_one_or_none()
-                class_name = sub.group.class_.name if (sub.group and sub.group.class_) else ""
-                first_name = stu.first_name if stu else ""
-                expiry_str = str(sub.end_date)
-                remaining = sub.remaining_sessions  # None for monthly
-
-                await create_notification(
-                    db,
-                    user_id=student_id,
-                    type="subscription_expiring",
-                    title="اشتراكك ينتهي قريباً",
-                    message=f"اشتراكك في {class_name} ينتهي بتاريخ {expiry_str}",
-                    entity_type="subscription",
-                    entity_id=sub.id,
-                )
-                await send_email_notification(
-                    db,
-                    user_id=student_id,
-                    notification_type="subscription_expiring",
-                    template_vars={
-                        "schoolName": "Académie Al-Nour",
-                        "firstName": first_name,
-                        "className": class_name,
-                        "expiryDate": expiry_str,
-                        "remainingSessions": remaining,
-                        "dashboardLink": f"/dashboard/my-subscriptions",
-                    },
-                )
-
-            # ── Expired ───────────────────────────────────────────────────────
-            expired_result = await db.execute(
-                select(Subscription).where(
-                    and_(
-                        Subscription.status == "active",
-                        Subscription.type == "monthly",
-                        Subscription.end_date != None,  # noqa: E711
-                        Subscription.end_date < today,
-                    )
-                )
-            )
-            expired_subs = expired_result.scalars().all()
-
-            for sub in expired_subs:
-                student_id = sub.student_id
-                if not student_id:
-                    continue
-                # Mark as expired
-                sub.status = "expired"
-
-                recent_check = await db.execute(
-                    select(Notification).where(
-                        and_(
-                            Notification.user_id == student_id,
-                            Notification.type == "subscription_expired",
-                            Notification.entity_id == sub.id,
-                        )
-                    ).limit(1)
-                )
-                if recent_check.scalar_one_or_none():
-                    continue  # Already notified
-
-                stu_result = await db.execute(select(User).where(User.id == student_id))
-                stu = stu_result.scalar_one_or_none()
-                class_name = sub.group.class_.name if (sub.group and sub.group.class_) else ""
-                first_name = stu.first_name if stu else ""
-                expiry_str = str(sub.end_date)
-
-                await create_notification(
-                    db,
-                    user_id=student_id,
-                    type="subscription_expired",
-                    title="انتهى اشتراكك",
-                    message=f"انتهى اشتراكك في {class_name} بتاريخ {expiry_str}",
-                    entity_type="subscription",
-                    entity_id=sub.id,
-                )
-                await send_email_notification(
-                    db,
-                    user_id=student_id,
-                    notification_type="subscription_expired",
-                    template_vars={
-                        "schoolName": "Académie Al-Nour",
-                        "firstName": first_name,
-                        "className": class_name,
-                        "expiryDate": expiry_str,
-                        "dashboardLink": f"/dashboard/my-subscriptions",
-                    },
-                )
-
-            await db.commit()
-            if expiring_subs or expired_subs:
-                logger.info(
-                    "scan_expiring_subscriptions: %d expiring, %d expired",
-                    len(expiring_subs), len(expired_subs),
-                )
+            results = await run_notification_sweeps(db)
+            logger.info("scan_expiring_subscriptions sweep results: %s", results)
         except Exception as exc:
             logger.error("scan_expiring_subscriptions error: %s", exc, exc_info=True)
 
@@ -382,6 +243,7 @@ def create_app() -> FastAPI:
     app.include_router(payments_router, prefix="/api")
     app.include_router(assignments_router, prefix="/api")
     app.include_router(submissions_router, prefix="/api")
+    app.include_router(analytics_router, prefix="/api")
 
 
 

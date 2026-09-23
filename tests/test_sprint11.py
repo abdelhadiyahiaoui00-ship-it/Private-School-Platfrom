@@ -30,3 +30,24 @@ def test_deep_link_admin():
     admin_user = User(id=3, role="admin")
     route = resolve_notification_route("enrollment_approved", "enrollment", 100, admin_user)
     assert route == "/dashboard/admin/enrollments?enrollmentId=100"
+
+
+def test_email_template_assignment_due_soon():
+    template_ar = get_email_template("assignment_due_soon", locale="ar")
+    assert template_ar is not None
+    assert "تذكير: اقتراب موعد تسليم الواجب" in template_ar
+
+    template_en = get_email_template("assignment_due_soon", locale="en")
+    assert template_en is not None
+    assert "Reminder: Assignment Due Soon" in template_en
+
+    template_fr = get_email_template("assignment_due_soon", locale="fr")
+    assert template_fr is not None
+    assert "Rappel : Devoir à rendre bientôt" in template_fr
+
+
+def test_deep_link_assignment_due_soon():
+    student_user = User(id=5, role="student")
+    route = resolve_notification_route("assignment_due_soon", "assignment", 42, student_user)
+    assert route == "/dashboard/my-assignments?assignmentId=42"
+

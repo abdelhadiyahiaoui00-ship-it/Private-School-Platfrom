@@ -522,6 +522,81 @@ TEMPLATE_ENROLLMENT_GROUP_TRANSFERRED_FR = """\
 </body>
 </html>"""
 
+TEMPLATE_ASSIGNMENT_DUE_SOON_AR = """\
+<html dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+    <div style="background:#d97706;padding:24px;text-align:center;">
+      <h1 style="color:#fff;margin:0;font-size:20px;">{{ schoolName }}</h1>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="color:#d97706;margin-top:0;">⏰ تذكير: اقتراب موعد تسليم الواجب</h2>
+      <p>مرحباً <strong>{{ firstName }}</strong>،</p>
+      <p>نودّ تذكيرك بأن موعد تسليم الواجب التالي يقترب:</p>
+      <div style="background:#fffbeb;border-right:4px solid #d97706;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:4px 0;"><strong>الواجب:</strong> {{ assignmentTitle }}</p>
+        <p style="margin:4px 0;"><strong>الفصل:</strong> {{ className }}</p>
+        <p style="margin:4px 0;"><strong>تاريخ الاستحقاق:</strong> {{ dueDate }}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{{ dashboardLink }}" style="background:#d97706;color:#fff;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
+          تسليم الواجب
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+
+TEMPLATE_ASSIGNMENT_DUE_SOON_EN = """\
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;">
+    <div style="background:#d97706;padding:24px;text-align:center;">
+      <h1 style="color:#fff;margin:0;">{{ schoolName }}</h1>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="color:#d97706;margin-top:0;">⏰ Reminder: Assignment Due Soon</h2>
+      <p>Hello <strong>{{ firstName }}</strong>,</p>
+      <p>This is a reminder that the following assignment is due soon:</p>
+      <div style="background:#fffbeb;border-left:4px solid #d97706;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:4px 0;"><strong>Assignment:</strong> {{ assignmentTitle }}</p>
+        <p style="margin:4px 0;"><strong>Class:</strong> {{ className }}</p>
+        <p style="margin:4px 0;"><strong>Due Date:</strong> {{ dueDate }}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{{ dashboardLink }}" style="background:#d97706;color:#fff;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Submit Assignment</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+
+TEMPLATE_ASSIGNMENT_DUE_SOON_FR = """\
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;">
+    <div style="background:#d97706;padding:24px;text-align:center;"><h1 style="color:#fff;margin:0;">{{ schoolName }}</h1></div>
+    <div style="padding:32px;">
+      <h2 style="color:#d97706;margin-top:0;">⏰ Rappel : Devoir à rendre bientôt</h2>
+      <p>Bonjour <strong>{{ firstName }}</strong>,</p>
+      <p>Nous vous rappelons que le devoir suivant doit être rendu bientôt :</p>
+      <div style="background:#fffbeb;border-left:4px solid #d97706;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:4px 0;"><strong>Devoir :</strong> {{ assignmentTitle }}</p>
+        <p style="margin:4px 0;"><strong>Classe :</strong> {{ className }}</p>
+        <p style="margin:4px 0;"><strong>Date limite :</strong> {{ dueDate }}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{{ dashboardLink }}" style="background:#d97706;color:#fff;padding:12px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Soumettre le devoir</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+
 # ─── Template Registry ────────────────────────────────────────────────────────
 
 TEMPLATES: dict[str, dict[str, str]] = {
@@ -554,6 +629,11 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "ar": TEMPLATE_ASSIGNMENT_SUBMITTED_AR,
         "en": TEMPLATE_ASSIGNMENT_SUBMITTED_EN,
         "fr": TEMPLATE_ASSIGNMENT_SUBMITTED_FR,
+    },
+    "assignment_due_soon": {
+        "ar": TEMPLATE_ASSIGNMENT_DUE_SOON_AR,
+        "en": TEMPLATE_ASSIGNMENT_DUE_SOON_EN,
+        "fr": TEMPLATE_ASSIGNMENT_DUE_SOON_FR,
     },
     "enrollment_group_transferred": {
         "ar": TEMPLATE_ENROLLMENT_GROUP_TRANSFERRED_AR,

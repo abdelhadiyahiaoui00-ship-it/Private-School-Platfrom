@@ -50,6 +50,10 @@ def resolve_notification_route(
             return "/dashboard/my-subscriptions"
         if notification_type == "assignment_submitted" and entity_type == "session" and entity_id:
             return f"/dashboard/sessions/{entity_id}"
+        if notification_type == "assignment_due_soon":
+            if entity_type == "assignment" and entity_id:
+                return f"/dashboard/my-assignments?assignmentId={entity_id}"
+            return "/dashboard/my-assignments"
         # Fallback
         return "/dashboard/my-enrollments"
 
