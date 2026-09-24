@@ -37,29 +37,76 @@ class AssignmentService:
             await self._check_effective_teacher(a.group_id, actor_id)
         return await self._build(a)
 
+    async def _verify_parent_child_access(
+        self, parent_id: int, student_id: int, target_group_id: Optional[int] = None
+    ) -> list[int]:
+        from src.modules.users.models import ParentStudentLink
+        from src.core.exceptions import PermissionDenied
+
+        # Check (a): student is linked to caller parent
+        link_stmt = select(ParentStudentLink).where(
+            and_(
+                ParentStudentLink.parent_id == parent_id,
+                ParentStudentLink.student_id == student_id,
+            )
+        )
+        link = (await self.session.execute(link_stmt)).scalar_one_or_none()
+        if not link:
+            raise PermissionDenied(message="Student is not a linked child of this parent.")
+
+        # Check (b): student holds an active, non-expired subscription/enrollment for the group being queried
+        active_group_ids = await self._get_student_active_group_ids(student_id)
+        if target_group_id is not None:
+            if target_group_id not in active_group_ids:
+                raise PermissionDenied(message="Student does not have an active subscription for this group.")
+        else:
+            if not active_group_ids:
+                raise PermissionDenied(message="Student has no active subscriptions.")
+
+        return active_group_ids
+
     async def list_assignments(
         self, actor_id: int, is_admin: bool, filters: dict, page: int, page_size: int,
         actor: Optional[User] = None,  # ── Sprint 9
     ) -> dict:
         viewer_student_id = filters.get("viewerStudentId")
-        is_student_or_parent = actor is not None and actor.role in ("student", "parent")
+        target_student_id: Optional[int] = None
+        target_group_id = filters.get("groupId")
 
         stmt = select(Assignment)
 
-        if viewer_student_id is not None:
-            # Explicit override for a caller that already verified access through a DIFFERENT mechanism
-            # (e.g. parent viewing a child's group page). When set, mySubmission is resolved for THIS student id
-            # regardless of the calling user's own role. Caller is trusted; no additional throw here.
-            active_group_ids = await self._get_student_active_group_ids(viewer_student_id)
-            if active_group_ids and not filters.get("groupId") and not filters.get("classId"):
-                stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
-        elif is_student_or_parent:
-            # Sprint 9: scope to groups where actor has an active enrollment
+        if actor is not None and actor.role == "student":
+            # Rule 1: Student role ignores viewerStudentId — mySubmission resolves to actor.id
+            target_student_id = actor_id
             active_group_ids = await self._get_student_active_group_ids(actor_id)
             if not active_group_ids:
                 raise AssignmentNotEnrolled()
             stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+
+        elif actor is not None and actor.role == "parent":
+            if viewer_student_id is not None:
+                # Rule 2 & 3: Parent with viewerStudentId -> server-side verification
+                active_gids = await self._verify_parent_child_access(actor_id, viewer_student_id, target_group_id)
+                target_student_id = viewer_student_id
+                if not filters.get("groupId") and not filters.get("classId"):
+                    stmt = stmt.where(Assignment.group_id.in_(active_gids))
+            else:
+                # Parent without viewerStudentId
+                active_group_ids = await self._get_student_active_group_ids(actor_id)
+                if not active_group_ids:
+                    child_gids = []
+                    from src.modules.users.models import ParentStudentLink
+                    links = (await self.session.execute(
+                        select(ParentStudentLink.student_id).where(ParentStudentLink.parent_id == actor_id)
+                    )).scalars().all()
+                    for cid in links:
+                        child_gids.extend(await self._get_student_active_group_ids(cid))
+                    active_group_ids = list(set(child_gids))
+                if active_group_ids and not filters.get("groupId") and not filters.get("classId"):
+                    stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+
         elif not is_admin:
+            # Rule 4: Other roles (teacher, etc.) ignore viewerStudentId
             stmt = self._scope_to_teacher(stmt, actor_id)
 
         if search := filters.get("search"):
@@ -92,10 +139,6 @@ class AssignmentService:
         result = await self.session.execute(stmt.offset((page - 1) * page_size).limit(page_size))
         assignments = result.scalars().all()
 
-        target_student_id = viewer_student_id if viewer_student_id is not None else (
-            actor_id if (actor is not None and actor.role == "student") else None
-        )
-
         items = []
         for a in assignments:
             item = await self._build(a)
@@ -111,10 +154,10 @@ class AssignmentService:
                 else:
                     item["mySubmission"] = None
             else:
-                item["mySubmission"] = None  # Not applicable for teacher/admin without viewerStudentId
+                item["mySubmission"] = None
             items.append(item)
 
-        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold, actor=actor, viewer_student_id=viewer_student_id)
+        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold, actor=actor, viewer_student_id=target_student_id)
         return {"items": items, "pagination": build_pagination(page, page_size, total), "stats": stats}
 
     async def create_assignment(self, body, actor_id: int, is_admin: bool, ip: str = None) -> dict:
