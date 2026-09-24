@@ -78,9 +78,11 @@ async def list_assignments(
     page_size: int = Query(20, alias="pageSize", ge=1, le=1000),
     sort_by: str = Query("createdAt", alias="sortBy"),
     sort_order: str = Query("desc", alias="sortOrder"),
+    viewer_student_id: Optional[int] = Query(None, alias="viewerStudentId"),
 ):
     filters = {"search": search, "classId": class_id, "groupId": group_id, "batchId": batch_id,
-               "dueStatus": due_status, "sortBy": sort_by, "sortOrder": sort_order}
+               "dueStatus": due_status, "sortBy": sort_by, "sortOrder": sort_order,
+               "viewerStudentId": viewer_student_id}
     return {"data": await svc.list_assignments(actor.id, _is_admin(actor), filters, page, page_size, actor=actor)}
 
 

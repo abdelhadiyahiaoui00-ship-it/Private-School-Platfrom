@@ -41,11 +41,19 @@ class AssignmentService:
         self, actor_id: int, is_admin: bool, filters: dict, page: int, page_size: int,
         actor: Optional[User] = None,  # ── Sprint 9
     ) -> dict:
+        viewer_student_id = filters.get("viewerStudentId")
         is_student_or_parent = actor is not None and actor.role in ("student", "parent")
 
         stmt = select(Assignment)
 
-        if is_student_or_parent:
+        if viewer_student_id is not None:
+            # Explicit override for a caller that already verified access through a DIFFERENT mechanism
+            # (e.g. parent viewing a child's group page). When set, mySubmission is resolved for THIS student id
+            # regardless of the calling user's own role. Caller is trusted; no additional throw here.
+            active_group_ids = await self._get_student_active_group_ids(viewer_student_id)
+            if active_group_ids and not filters.get("groupId") and not filters.get("classId"):
+                stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+        elif is_student_or_parent:
             # Sprint 9: scope to groups where actor has an active enrollment
             active_group_ids = await self._get_student_active_group_ids(actor_id)
             if not active_group_ids:
@@ -84,14 +92,17 @@ class AssignmentService:
         result = await self.session.execute(stmt.offset((page - 1) * page_size).limit(page_size))
         assignments = result.scalars().all()
 
+        target_student_id = viewer_student_id if viewer_student_id is not None else (
+            actor_id if (actor is not None and actor.role == "student") else None
+        )
+
         items = []
         for a in assignments:
             item = await self._build(a)
-            # ── Sprint 9: populate mySubmission for student/parent callers ─────
-            if is_student_or_parent:
+            if target_student_id is not None:
                 sub = (await self.session.execute(
                     select(AssignmentSubmission).where(
-                        and_(AssignmentSubmission.assignment_id == a.id, AssignmentSubmission.student_id == actor_id)
+                        and_(AssignmentSubmission.assignment_id == a.id, AssignmentSubmission.student_id == target_student_id)
                     )
                 )).scalar_one_or_none()
                 if sub:
@@ -100,10 +111,10 @@ class AssignmentService:
                 else:
                     item["mySubmission"] = None
             else:
-                item["mySubmission"] = None  # Not applicable for teacher/admin
+                item["mySubmission"] = None  # Not applicable for teacher/admin without viewerStudentId
             items.append(item)
 
-        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold, actor=actor)
+        stats = await self._compute_stats(actor_id, is_admin, now, soon_threshold, actor=actor, viewer_student_id=viewer_student_id)
         return {"items": items, "pagination": build_pagination(page, page_size, total), "stats": stats}
 
     async def create_assignment(self, body, actor_id: int, is_admin: bool, ip: str = None) -> dict:
@@ -476,9 +487,15 @@ class AssignmentService:
         )
         return [r[0] for r in result.all()]
 
-    async def _compute_stats(self, actor_id: int, is_admin: bool, now: datetime, soon: datetime, actor: Optional[User] = None) -> dict:
+    async def _compute_stats(
+        self, actor_id: int, is_admin: bool, now: datetime, soon: datetime, actor: Optional[User] = None, viewer_student_id: Optional[int] = None
+    ) -> dict:
         stmt = select(Assignment)
-        if actor and actor.role in ("student", "parent"):
+        if viewer_student_id is not None:
+            active_group_ids = await self._get_student_active_group_ids(viewer_student_id)
+            if active_group_ids:
+                stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
+        elif actor and actor.role in ("student", "parent"):
             active_group_ids = await self._get_student_active_group_ids(actor_id)
             if active_group_ids:
                 stmt = stmt.where(Assignment.group_id.in_(active_group_ids))
