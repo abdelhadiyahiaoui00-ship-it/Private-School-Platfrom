@@ -46,6 +46,7 @@ from src.modules.assignments.router import (
     my_classes_router,
 )
 from src.modules.analytics.router import router as analytics_router
+from src.modules.media.router import router as media_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -244,6 +245,7 @@ def create_app() -> FastAPI:
     app.include_router(assignments_router, prefix="/api")
     app.include_router(submissions_router, prefix="/api")
     app.include_router(analytics_router, prefix="/api")
+    app.include_router(media_router, prefix="/api")
 
 
 

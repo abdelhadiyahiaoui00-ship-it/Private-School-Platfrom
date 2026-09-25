@@ -250,4 +250,5 @@ class ProjectFileType(str, enum.Enum):
 
 class CloudinaryResourceType(str, enum.Enum):
     image = "image"
+    video = "video"
     raw = "raw"
