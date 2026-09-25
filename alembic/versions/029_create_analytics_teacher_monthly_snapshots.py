@@ -8,8 +8,9 @@ from typing import Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = '029_analytics_teacher_monthly_snapshots'
+revision: str = '029_teacher_monthly_snapshots'
 down_revision: Union[str, None] = '028_analytics_monthly_snapshots'
+
 branch_labels = None
 depends_on = None
 

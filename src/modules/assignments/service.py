@@ -451,7 +451,18 @@ class AssignmentService:
             })
 
         sub_groups_res = await self.session.execute(
-            select(Group).where(and_(Group.teacher_id == teacher_id, Group.status == "active")).order_by(Group.name))
+            select(Group)
+            .join(Class, Class.id == Group.class_id)
+            .where(
+                and_(
+                    Group.status == "active",
+                    Class.status == "active",
+                    Group.teacher_id == teacher_id,
+                    or_(Class.teacher_id != teacher_id, Class.teacher_id.is_(None)),
+                )
+            )
+            .order_by(Group.name)
+        )
         substitute_groups = []
         for g in sub_groups_res.scalars().all():
             if g.id in listed_group_ids:
@@ -464,15 +475,19 @@ class AssignmentService:
             if not cls:
                 continue
             substitute_groups.append({
-                "id": g.id, "name": g.name, "capacity": g.max_students,
+                "id": g.id,
+                "name": g.name,
+                "capacity": g.max_students,
                 "parentClass": {
-                    "id": cls.id, "name": cls.name,
+                    "id": cls.id,
+                    "name": cls.name,
                     "moduleName": cls.module.name if cls.module else "",
                     "branchName": cls.branch.name if cls.branch else "",
                     "defaultTeacherName": f"{cls.teacher.first_name} {cls.teacher.last_name}" if cls.teacher else "",
                 },
             })
         return {"classes": classes_list, "substituteGroups": substitute_groups}
+
 
     # ─── Helpers ──────────────────────────────────────────────────────────────
 

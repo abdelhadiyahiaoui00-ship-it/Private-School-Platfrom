@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from src.core.database import DBSessionDep
-from src.modules.auth.dependencies import require_manage_subscriptions
+from src.modules.auth.dependencies import require_manage_subscriptions, get_current_user
 from src.modules.users.models import User
 from src.modules.subscriptions.schemas import (
     RenewSubscriptionRequest,
@@ -48,11 +48,31 @@ async def list_subscriptions(
     return {"data": result}
 
 
+# CRITICAL: /my must be defined BEFORE /{subscription_id}
+@router.get("/my", summary="Get my subscriptions (student/parent)")
+async def get_my_subscriptions(
+    actor: User = Depends(get_current_user),
+    service: SubscriptionService = Depends(get_service),
+    student_ids: Optional[str] = Query(None, alias="studentIds"),
+):
+    parsed_ids = None
+    if student_ids:
+        parsed_ids = []
+        for part in student_ids.split(","):
+            part = part.strip()
+            if part.isdigit():
+                parsed_ids.append(int(part))
+
+    items = await service.get_my_subscriptions(actor, student_ids=parsed_ids)
+    return {"data": items}
+
+
 # IMPORTANT: /stats would conflict with /{sub_id} — removed entirely (not in spec)
 # Stats are inside GET /subscriptions response as "stats" field
 
 
 @router.get("/{subscription_id}", summary="Get subscription detail")
+
 async def get_subscription(
     subscription_id: int,
     actor: User = Depends(require_manage_subscriptions),

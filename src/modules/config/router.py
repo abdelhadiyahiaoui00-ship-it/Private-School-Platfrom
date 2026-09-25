@@ -27,6 +27,8 @@ FALLBACK_CONFIG = {
     "aboutTitle": None,
     "aboutDescription": None,
     "aboutStats": [],
+    "aboutVideoUrl": None,
+    "artUnderImageUrl": None,
     "socialLinks": {"facebook": None, "instagram": None, "youtube": None, "whatsapp": None},
     "monthlyDefaultDurationDays": 30,
     "monthlyExpiryWarningDays": 3,
@@ -61,8 +63,9 @@ async def update_config(
     service: ConfigService = Depends(get_config_service),
 ):
     result = await service.update(
-        body.model_dump(exclude_none=True, by_alias=False),
+        body.model_dump(exclude_unset=True, by_alias=False),
         actor,
         ip=request.client.host if request.client else None,
     )
     return {"data": result.model_dump(by_alias=True)}
+

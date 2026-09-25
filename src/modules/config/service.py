@@ -72,7 +72,7 @@ class ConfigService:
         scalar_fields = [
             "default_language", "school_name", "contact_email", "contact_phone",
             "address", "founding_year", "logo_url", "wide_logo_url", "favicon_url",
-            "about_title", "about_description",
+            "about_title", "about_description", "about_video_url", "art_under_image_url",
             "monthly_default_duration_days", "monthly_expiry_warning_days",
             "session_based_expiry_warning_sessions", "session_generation_horizon_weeks",
             "enrollment_reservation_hold_hours",
@@ -144,6 +144,8 @@ class ConfigService:
             about_title=config.about_title,
             about_description=config.about_description,
             about_stats=about_stats,
+            about_video_url=config.about_video_url,
+            art_under_image_url=config.art_under_image_url,
             social_links=social_links,
             monthly_default_duration_days=config.monthly_default_duration_days,
             monthly_expiry_warning_days=config.monthly_expiry_warning_days,
@@ -153,3 +155,4 @@ class ConfigService:
             updated_at=config.updated_at,
             updated_by=config.updated_by,
         )
+

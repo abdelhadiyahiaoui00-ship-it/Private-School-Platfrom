@@ -2,6 +2,8 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 import logging
@@ -20,6 +22,9 @@ from src.modules.groups.repository import GroupRepository
 from src.modules.classes.repository import ClassRepository
 from src.modules.enrollments.repository import EnrollmentRepository
 from src.modules.users.repository import UserRepository
+from src.modules.groups.models import Group
+from src.modules.classes.models import Class
+
 from src.modules.config.service import ConfigService
 from src.modules.subscriptions.exceptions import (
     SubscriptionNotFound,
@@ -681,11 +686,20 @@ class SubscriptionService:
         is_expiring_soon = False
         is_expired = False
 
-        if sub.status == "active" and sub.end_date:
-            if sub.end_date < today:
+        if sub.status in ("expired", "cancelled"):
+            is_expired = True
+        elif sub.type == "monthly":
+            if sub.end_date and sub.end_date < today:
                 is_expired = True
-            elif sub.end_date <= today + timedelta(days=3):
+            elif sub.end_date and sub.end_date <= today + timedelta(days=3):
                 is_expiring_soon = True
+        elif sub.type == "session_based":
+            if sub.remaining_sessions is not None and sub.remaining_sessions <= 0:
+                is_expired = True
+            elif sub.remaining_sessions is not None and sub.remaining_sessions <= 1:
+                is_expiring_soon = True
+
+        effective_status = "expired" if (sub.status == "active" and is_expired) else sub.status
 
         # Commission visibility (Sprint 10)
         show_commission = resolve_commission_visibility(
@@ -723,7 +737,7 @@ class SubscriptionService:
                 "default_commission_percent": teacher_default_commission if show_commission else None,
             },
             type=sub.type,
-            status=sub.status,
+            status=effective_status,
             start_date=sub.start_date,
             end_date=sub.end_date,
             total_sessions=sub.total_sessions,
@@ -742,6 +756,68 @@ class SubscriptionService:
             cancelled_at=sub.cancelled_at,
             cancelled_reason=sub.cancelled_reason,
         )
+
+    async def get_my_subscriptions(
+        self,
+        actor: User,
+        student_ids: Optional[list[int]] = None,
+    ) -> list[dict]:
+        target_student_ids: list[int] = []
+
+        if actor.role == "student":
+            if student_ids:
+                for sid in student_ids:
+                    if sid != actor.id:
+                        raise HTTPException(status_code=403, detail="Cannot view subscriptions for other students.")
+            target_student_ids = [actor.id]
+
+        elif actor.role == "parent":
+            from src.modules.users.models import ParentStudentLink
+            links_res = await self.session.execute(
+                select(ParentStudentLink.student_id).where(ParentStudentLink.parent_id == actor.id)
+            )
+            linked_student_ids = set(links_res.scalars().all())
+
+            if student_ids:
+                for sid in student_ids:
+                    if sid not in linked_student_ids:
+                        raise HTTPException(status_code=403, detail="Cannot view subscriptions for unlinked students.")
+                target_student_ids = student_ids
+            else:
+                target_student_ids = list(linked_student_ids)
+
+        else:
+            # Admin / SuperAdmin / Owner / Teacher
+            if student_ids:
+                target_student_ids = student_ids
+
+        if not target_student_ids:
+            return []
+
+        res = await self.session.execute(
+            select(Subscription)
+            .where(Subscription.student_id.in_(target_student_ids))
+            .options(
+                selectinload(Subscription.student),
+                selectinload(Subscription.group).selectinload(Group.class_).selectinload(Class.module),
+                selectinload(Subscription.group).selectinload(Group.teacher),
+                selectinload(Subscription.teacher),
+                selectinload(Subscription.branch),
+            )
+            .order_by(Subscription.created_at.desc())
+        )
+        subs = res.scalars().all()
+
+        enrollment_ids = [s.enrollment_id for s in subs]
+        latest_map = await self.sub_repo.get_latest_subscription_ids(enrollment_ids)
+
+        items = []
+        for sub in subs:
+            is_latest = latest_map.get(sub.enrollment_id) == sub.id
+            items.append(self._map_to_response(sub, is_latest, actor=actor).model_dump(by_alias=True))
+
+        return items
+
 
     def _map_to_detail_response(self, sub: Subscription, is_latest: bool, enroll_source: str, actor=None) -> SubscriptionDetailResponse:
         base = self._map_to_response(sub, is_latest, actor=actor)

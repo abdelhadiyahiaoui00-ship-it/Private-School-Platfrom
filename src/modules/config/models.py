@@ -23,6 +23,9 @@ class SystemConfig(Base):
     about_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     about_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     about_stats: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    about_video_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    art_under_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     social_links: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     # Subscription thresholds
     monthly_default_duration_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)

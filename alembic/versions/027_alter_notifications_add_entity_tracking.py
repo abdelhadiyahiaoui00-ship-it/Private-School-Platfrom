@@ -16,37 +16,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Use ADD COLUMN IF NOT EXISTS via raw SQL for safety
-    # (columns may already exist if ORM model was updated before this migration)
-    conn = op.get_bind()
+    op.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_type VARCHAR(30)")
+    op.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_id INTEGER")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_notifications_entity ON notifications (entity_type, entity_id)")
 
-    try:
-        op.add_column('notifications', sa.Column(
-            'entity_type',
-            sa.String(30),
-            nullable=True,
-        ))
-    except Exception:
-        pass  # Column already exists — safe to skip
-
-    try:
-        op.add_column('notifications', sa.Column(
-            'entity_id',
-            sa.Integer(),
-            nullable=True,
-        ))
-    except Exception:
-        pass  # Column already exists — safe to skip
-
-    # Create index — drop first if exists (idempotent)
-    try:
-        op.create_index(
-            'idx_notifications_entity',
-            'notifications',
-            ['entity_type', 'entity_id'],
-        )
-    except Exception:
-        pass  # Index already exists — safe to skip
 
 
 def downgrade() -> None:

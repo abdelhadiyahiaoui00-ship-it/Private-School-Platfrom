@@ -34,6 +34,8 @@ class SystemConfigResponse(BaseModel):
     about_title: Optional[str] = None
     about_description: Optional[str] = None
     about_stats: list[AboutStat] = []
+    about_video_url: Optional[str] = None
+    art_under_image_url: Optional[str] = None
     social_links: SocialLinks = SocialLinks()
     monthly_default_duration_days: int
     monthly_expiry_warning_days: int
@@ -58,7 +60,10 @@ class UpdateConfigRequest(BaseModel):
     about_title: Optional[str] = None
     about_description: Optional[str] = None
     about_stats: Optional[list[AboutStat]] = None
+    about_video_url: Optional[str] = None
+    art_under_image_url: Optional[str] = None
     social_links: Optional[SocialLinks] = None
+
     monthly_default_duration_days: Optional[int] = None
     monthly_expiry_warning_days: Optional[int] = None
     session_based_expiry_warning_sessions: Optional[int] = None
