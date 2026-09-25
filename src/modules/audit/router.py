@@ -5,7 +5,7 @@ from src.core.database import DBSessionDep
 from src.modules.auth.dependencies import CurrentUser
 from src.modules.audit.models import ActivityLog
 from src.common.pagination import build_pagination
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from datetime import datetime
 
@@ -21,7 +21,8 @@ class ActivityLogResponse(BaseModel):
     category: str
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
-    metadata: Optional[dict] = None
+    branch_id: Optional[int] = None
+    metadata: Optional[dict] = Field(None, validation_alias="metadata_")
     ip_address: Optional[str] = None
     created_at: datetime
 
@@ -69,7 +70,7 @@ async def list_all_logs(
     category: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, alias="pageSize", ge=1, le=200),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=1000),
 ):
     from sqlalchemy import func
 
