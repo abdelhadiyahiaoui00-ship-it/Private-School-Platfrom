@@ -212,9 +212,9 @@ class SubscriptionService:
         await log_action(
             session=self.session,
             user_id=actor.id,
-            action="subscription_renew",
+            action="SUBSCRIPTION_RENEWED",
             category="subscriptions",
-            entity_type="subscriptions",
+            entity_type="subscription",
             entity_id=new_sub.id,
             branch_id=old_sub.branch_id,
             metadata={"old_sub_id": old_sub.id, "amount": float(amount)},
@@ -285,9 +285,9 @@ class SubscriptionService:
         await log_action(
             session=self.session,
             user_id=actor.id,
-            action="subscription_extend",
+            action="SUBSCRIPTION_EXTENDED",
             category="subscriptions",
-            entity_type="subscriptions",
+            entity_type="subscription",
             entity_id=sub.id,
             branch_id=sub.branch_id,
             metadata=entry,
@@ -402,11 +402,11 @@ class SubscriptionService:
         await log_action(
             session=self.session,
             user_id=actor.id,
-            action="group_bulk_extend",
+            action="GROUP_BULK_EXTEND",
             category="subscriptions",
-            entity_type="groups",
+            entity_type="group",
             entity_id=group_id,
-            metadata={"extended_count": extended_count, "reason": reason},
+            metadata={"extendedCount": extended_count, "reason": reason},
             ip_address=ip,
         )
 
@@ -451,9 +451,9 @@ class SubscriptionService:
         await log_action(
             session=self.session,
             user_id=actor.id,
-            action="subscription_cancel",
+            action="SUBSCRIPTION_CANCELLED",
             category="subscriptions",
-            entity_type="subscriptions",
+            entity_type="subscription",
             entity_id=sub.id,
             branch_id=sub.branch_id,
             metadata={"reason": sub.cancelled_reason},
@@ -571,9 +571,9 @@ class SubscriptionService:
         await log_action(
             session=self.session,
             user_id=actor.id,
-            action="enrollment_confirm_payment",
+            action="ENROLLMENT_PAYMENT_CONFIRMED",
             category="enrollments",
-            entity_type="enrollments",
+            entity_type="enrollment",
             entity_id=enroll.id,
             branch_id=enroll.branch_id,
             metadata={"sub_id": sub.id, "amount": float(amount)},
