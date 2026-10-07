@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 from src.common.pagination import build_pagination
 from src.common.session_generator import generate_sessions
@@ -187,9 +187,9 @@ class SessionService:
 
         # ── Sprint 9: students/parents may read session detail ─────────────────
         if actor.role in ("student", "parent"):
-            # No branch/teacher scope check for enrolled students — just return the session
+            viewer_student_id = await self._resolve_viewer_student_id(sess, actor)
             response = _build_response(sess).model_dump(by_alias=True)
-            my_attendance = await self._get_my_attendance(sess, actor.id)
+            my_attendance = await self._get_my_attendance(sess, viewer_student_id)
             response["myAttendance"] = my_attendance
             return response
 
@@ -206,9 +206,50 @@ class SessionService:
         response["myAttendance"] = None  # Not applicable for admin/teacher
         return response
 
+    async def _resolve_viewer_student_id(self, sess: "Session", actor: User) -> int:
+        """Return the student whose enrollment grants this viewer access."""
+        from src.core.exceptions import PermissionDenied
+        from src.modules.enrollments.models import Enrollment
+
+        if actor.role == "student":
+            result = await self._session.execute(
+                select(Enrollment.student_id).where(
+                    and_(
+                        Enrollment.group_id == sess.group_id,
+                        Enrollment.student_id == actor.id,
+                        Enrollment.status == "active",
+                    )
+                )
+            )
+            if result.scalar_one_or_none() is not None:
+                return actor.id
+            raise PermissionDenied(message="Student is not enrolled in this session's group.")
+
+        if actor.role == "parent":
+            from src.modules.users.models import ParentStudentLink
+
+            result = await self._session.execute(
+                select(ParentStudentLink.student_id)
+                .join(Enrollment, Enrollment.student_id == ParentStudentLink.student_id)
+                .where(
+                    and_(
+                        ParentStudentLink.parent_id == actor.id,
+                        Enrollment.group_id == sess.group_id,
+                        Enrollment.status == "active",
+                    )
+                )
+                .order_by(ParentStudentLink.student_id.asc())
+                .limit(1)
+            )
+            student_id = result.scalar_one_or_none()
+            if student_id is not None:
+                return student_id
+            raise PermissionDenied(message="No linked child is enrolled in this session's group.")
+
+        raise PermissionDenied()
+
     async def _get_my_attendance(self, sess: "Session", student_id: int) -> Optional[dict]:
         """Fetch attendance for a student in this session, only if they hold an active enrollment."""
-        from sqlalchemy import and_
         from src.modules.enrollments.models import Enrollment
         from src.modules.attendance.models import Attendance
 

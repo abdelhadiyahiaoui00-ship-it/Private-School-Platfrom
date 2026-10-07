@@ -1,12 +1,17 @@
 import pytest
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 
 import src.app  # Register SQLAlchemy models
 from src.modules.assignments.service import AssignmentService
+from src.modules.branches.models import Branch
 from src.modules.classes.models import Class
+from src.core.exceptions import PermissionDenied
 from src.modules.groups.models import Group
+from src.modules.modules.models import Module
+from src.modules.sessions.models import Session
+from src.modules.sessions.service import SessionService
 from src.modules.subscriptions.service import SubscriptionService
 from src.modules.subscriptions.models import Subscription
 from src.modules.config.service import ConfigService
@@ -229,6 +234,98 @@ async def test_get_my_subscriptions_parent_access():
     with pytest.raises(HTTPException) as exc_info:
         await service.get_my_subscriptions(actor=parent_user, student_ids=[99])
     assert exc_info.value.status_code == 403
+
+
+def _session_detail_fixture() -> Session:
+    now = datetime.now(timezone.utc)
+    module = Module(id=3, name="Science")
+    cls = Class(
+        id=2,
+        name="Physics",
+        module_id=module.id,
+        branch_id=1,
+        teacher_id=20,
+        education_stage="all",
+        status="active",
+    )
+    cls.module = module
+    cls.teacher = None
+
+    group = Group(
+        id=7,
+        class_id=cls.id,
+        name="Physics A",
+        teacher_id=None,
+        room="Room 1",
+        max_students=20,
+        price=1000,
+        subscription_type="monthly",
+        status="active",
+    )
+    group.class_ = cls
+    group.teacher = None
+
+    branch = Branch(id=1, name="Main Branch", is_active=True)
+
+    sess = Session(
+        id=11,
+        group_id=group.id,
+        branch_id=branch.id,
+        session_date=date.today(),
+        start_time=time(10, 0),
+        end_time=time(12, 0),
+        room="Room 1",
+        status="completed",
+        created_at=now,
+        updated_at=now,
+    )
+    sess.group_ = group
+    sess.branch = branch
+    return sess
+
+
+@pytest.mark.asyncio
+async def test_get_session_allows_parent_with_enrolled_child():
+    mock_session = AsyncMock()
+    sess = _session_detail_fixture()
+
+    parent_access_res = MagicMock()
+    parent_access_res.scalar_one_or_none.return_value = 5
+    mock_session.execute.return_value = parent_access_res
+
+    service = SessionService(mock_session)
+    service._repo = MagicMock()
+    service._repo.get_by_id = AsyncMock(return_value=sess)
+    service._get_my_attendance = AsyncMock(return_value={"status": "present"})
+
+    parent_user = User(id=10, role="parent")
+    data = await service.get_session(sess.id, parent_user)
+
+    assert data["id"] == sess.id
+    assert data["groupId"] == sess.group_id
+    assert data["myAttendance"]["status"] == "present"
+    service._get_my_attendance.assert_awaited_once_with(sess, 5)
+
+
+@pytest.mark.asyncio
+async def test_get_session_denies_parent_without_enrolled_child():
+    mock_session = AsyncMock()
+    sess = _session_detail_fixture()
+
+    parent_access_res = MagicMock()
+    parent_access_res.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = parent_access_res
+
+    service = SessionService(mock_session)
+    service._repo = MagicMock()
+    service._repo.get_by_id = AsyncMock(return_value=sess)
+    service._get_my_attendance = AsyncMock()
+
+    parent_user = User(id=10, role="parent")
+    with pytest.raises(PermissionDenied):
+        await service.get_session(sess.id, parent_user)
+
+    service._get_my_attendance.assert_not_awaited()
 
 
 @pytest.mark.asyncio
