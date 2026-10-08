@@ -585,20 +585,132 @@ class AttendanceService:
         direction: str = "current",
         page_size: int = 8,
     ) -> dict:
+        return await self._build_attendance_matrix(
+            group_id,
+            actor,
+            anchor_date=anchor_date,
+            direction=direction,
+            page_size=page_size,
+            require_group_access=True,
+        )
+
+    async def get_my_attendance_matrix(
+        self,
+        group_id: int,
+        actor: User,
+        student_id: Optional[int] = None,
+        anchor_date: Optional[date] = None,
+        direction: str = "current",
+        page_size: int = 8,
+    ) -> dict:
+        requested_student_id = await self._resolve_my_attendance_student_id(
+            actor, student_id
+        )
+        has_group_history = await self._student_has_group_history(
+            group_id, requested_student_id
+        )
+
+        return await self._build_attendance_matrix(
+            group_id,
+            actor,
+            anchor_date=anchor_date,
+            direction=direction,
+            page_size=page_size,
+            require_group_access=False,
+            student_ids_filter={requested_student_id},
+            force_student_ids={requested_student_id} if has_group_history else set(),
+            include_sessions_when_empty=True,
+        )
+
+    async def _resolve_my_attendance_student_id(
+        self, actor: User, student_id: Optional[int]
+    ) -> int:
+        from src.core.exceptions import PermissionDenied
+
+        if actor.role == "student":
+            if student_id is not None and student_id != actor.id:
+                raise PermissionDenied(
+                    message="Students can only access their own attendance."
+                )
+            return actor.id
+
+        if actor.role == "parent":
+            if student_id is None:
+                raise PermissionDenied(message="studentId is required for parent access.")
+
+            from src.modules.users.models import ParentStudentLink
+
+            link_result = await self._session.execute(
+                select(ParentStudentLink.id)
+                .where(
+                    ParentStudentLink.parent_id == actor.id,
+                    ParentStudentLink.student_id == student_id,
+                )
+                .limit(1)
+            )
+            if link_result.scalar_one_or_none() is None:
+                raise PermissionDenied(
+                    message="Student is not a linked child of this parent."
+                )
+            return student_id
+
+        raise PermissionDenied(
+            message="Only students and parents can access this endpoint."
+        )
+
+    async def _student_has_group_history(self, group_id: int, student_id: int) -> bool:
+        enrollment_result = await self._session.execute(
+            select(Enrollment.id)
+            .where(
+                Enrollment.group_id == group_id,
+                Enrollment.student_id == student_id,
+                Enrollment.status.in_(("active", "completed", "cancelled")),
+            )
+            .limit(1)
+        )
+        if enrollment_result.scalar_one_or_none() is not None:
+            return True
+
+        attendance_result = await self._session.execute(
+            select(Attendance.student_id)
+            .join(Session, Attendance.session_id == Session.id)
+            .where(
+                Session.group_id == group_id,
+                Attendance.student_id == student_id,
+            )
+            .limit(1)
+        )
+        return attendance_result.scalar_one_or_none() is not None
+
+    async def _build_attendance_matrix(
+        self,
+        group_id: int,
+        actor: User,
+        anchor_date: Optional[date] = None,
+        direction: str = "current",
+        page_size: int = 8,
+        require_group_access: bool = False,
+        student_ids_filter: Optional[set[int]] = None,
+        force_student_ids: Optional[set[int]] = None,
+        include_sessions_when_empty: bool = False,
+    ) -> dict:
         from src.modules.branches.models import Branch
         from src.modules.classes.models import Class as SchoolClass
         from src.modules.groups.models import Group
         from src.modules.modules.models import Module
         from src.modules.users.models import User as UserModel
 
-        group_result = await self._session.execute(select(Group).where(Group.id == group_id))
+        group_result = await self._session.execute(
+            select(Group).where(Group.id == group_id)
+        )
         group = group_result.scalar_one_or_none()
         if not group:
             from src.core.exceptions import ResourceNotFound
 
             raise ResourceNotFound(message="Group not found.")
 
-        await self._assert_group_access(group, actor)
+        if require_group_access:
+            await self._assert_group_access(group, actor)
 
         class_result = await self._session.execute(
             select(SchoolClass).where(SchoolClass.id == group.class_id)
@@ -658,6 +770,16 @@ class AttendanceService:
         has_prev = any(session.session_date < min_date for session in all_sessions)
         has_next = any(session.session_date > max_date for session in all_sessions)
         window_ids = [session.id for session in window]
+        sessions_out = [
+            MatrixSessionColumn(
+                id=sess.id,
+                session_date=sess.session_date,
+                start_time=str(sess.start_time)[:5],
+                end_time=str(sess.end_time)[:5],
+                status=sess.status,
+            )
+            for sess in window
+        ]
 
         enrolled_result = await self._session.execute(
             select(Enrollment).where(
@@ -676,7 +798,9 @@ class AttendanceService:
                 .distinct()
             )
             historical_ids = {row[0] for row in historical_result.all()}
-        all_student_ids = active_student_ids | historical_ids
+        all_student_ids = active_student_ids | historical_ids | (force_student_ids or set())
+        if student_ids_filter is not None:
+            all_student_ids = all_student_ids & student_ids_filter
 
         if not all_student_ids:
             return AttendanceMatrixResponse(
@@ -686,7 +810,7 @@ class AttendanceService:
                 module_name=module.name if module else "",
                 teacher_name=teacher_name,
                 branch_name=branch.name if branch else "",
-                sessions=[],
+                sessions=sessions_out if include_sessions_when_empty else [],
                 students=[],
                 date_range_label=self._format_date_range(window),
                 has_next_page=has_next,
@@ -759,17 +883,6 @@ class AttendanceService:
                     present_count_in_window=present_in_window,
                 )
             )
-
-        sessions_out = [
-            MatrixSessionColumn(
-                id=sess.id,
-                session_date=sess.session_date,
-                start_time=str(sess.start_time)[:5],
-                end_time=str(sess.end_time)[:5],
-                status=sess.status,
-            )
-            for sess in window
-        ]
 
         return AttendanceMatrixResponse(
             group_id=group_id,

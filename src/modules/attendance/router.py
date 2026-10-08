@@ -14,6 +14,7 @@ from src.modules.attendance.reschedule_service import RescheduleService
 from src.modules.attendance.schemas import MarkAttendanceRequest
 from src.modules.attendance.service import AttendanceService
 from src.modules.auth.dependencies import (
+    get_current_user,
     require_manage_sessions,
     require_manage_sessions_admin_only,
 )
@@ -89,6 +90,30 @@ async def create_reschedule_request(
     ip = request.client.host if request.client else None
     data = await service.create_request(
         session_id, body.model_dump(by_alias=False), actor, ip=ip
+    )
+    return {"data": data}
+
+
+@group_attendance_router.get(
+    "/{group_id}/my-attendance",
+    summary="Get my attendance matrix row for a group",
+)
+async def get_my_attendance(
+    group_id: int,
+    actor: User = Depends(get_current_user),
+    service: AttendanceService = Depends(get_attendance_service),
+    student_id: Optional[int] = Query(None, alias="studentId"),
+    anchor_date: Optional[date] = Query(None, alias="anchorDate"),
+    direction: str = Query("current"),
+    page_size: int = Query(8, alias="pageSize", ge=1, le=30),
+):
+    data = await service.get_my_attendance_matrix(
+        group_id,
+        actor,
+        student_id=student_id,
+        anchor_date=anchor_date,
+        direction=direction,
+        page_size=page_size,
     )
     return {"data": data}
 

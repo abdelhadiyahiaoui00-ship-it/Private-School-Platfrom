@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 import src.app  # Register SQLAlchemy models
 from src.modules.assignments.service import AssignmentService
+from src.modules.attendance.service import AttendanceService
 from src.modules.branches.models import Branch
 from src.modules.classes.models import Class
 from src.core.exceptions import PermissionDenied
@@ -326,6 +327,105 @@ async def test_get_session_denies_parent_without_enrolled_child():
         await service.get_session(sess.id, parent_user)
 
     service._get_my_attendance.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_my_attendance_rejects_student_requesting_other_student():
+    service = AttendanceService(AsyncMock())
+    student_user = User(id=5, role="student")
+
+    with pytest.raises(PermissionDenied):
+        await service.get_my_attendance_matrix(
+            group_id=7,
+            actor=student_user,
+            student_id=6,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_my_attendance_parent_filters_to_linked_child():
+    mock_session = AsyncMock()
+    link_res = MagicMock()
+    link_res.scalar_one_or_none.return_value = 1
+    mock_session.execute.return_value = link_res
+
+    service = AttendanceService(mock_session)
+    service._student_has_group_history = AsyncMock(return_value=True)
+    service._build_attendance_matrix = AsyncMock(
+        return_value={"students": [{"student": {"id": 5}}]}
+    )
+
+    parent_user = User(id=10, role="parent")
+    data = await service.get_my_attendance_matrix(
+        group_id=7,
+        actor=parent_user,
+        student_id=5,
+        direction="next",
+        page_size=4,
+    )
+
+    assert data["students"][0]["student"]["id"] == 5
+    service._build_attendance_matrix.assert_awaited_once()
+    kwargs = service._build_attendance_matrix.await_args.kwargs
+    assert kwargs["direction"] == "next"
+    assert kwargs["page_size"] == 4
+    assert kwargs["require_group_access"] is False
+    assert kwargs["student_ids_filter"] == {5}
+    assert kwargs["force_student_ids"] == {5}
+    assert kwargs["include_sessions_when_empty"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_my_attendance_denies_unlinked_parent_child():
+    mock_session = AsyncMock()
+    link_res = MagicMock()
+    link_res.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = link_res
+
+    service = AttendanceService(mock_session)
+    service._student_has_group_history = AsyncMock()
+    service._build_attendance_matrix = AsyncMock()
+
+    parent_user = User(id=10, role="parent")
+    with pytest.raises(PermissionDenied):
+        await service.get_my_attendance_matrix(
+            group_id=7,
+            actor=parent_user,
+            student_id=5,
+        )
+
+    service._student_has_group_history.assert_not_awaited()
+    service._build_attendance_matrix.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_my_attendance_without_row_returns_empty_students():
+    service = AttendanceService(AsyncMock())
+    service._student_has_group_history = AsyncMock(return_value=False)
+    service._build_attendance_matrix = AsyncMock(return_value={"students": []})
+
+    student_user = User(id=5, role="student")
+    data = await service.get_my_attendance_matrix(group_id=7, actor=student_user)
+
+    assert data["students"] == []
+    kwargs = service._build_attendance_matrix.await_args.kwargs
+    assert kwargs["student_ids_filter"] == {5}
+    assert kwargs["force_student_ids"] == set()
+
+
+@pytest.mark.asyncio
+async def test_get_my_attendance_denies_teacher_and_admin_roles():
+    service = AttendanceService(AsyncMock())
+
+    with pytest.raises(PermissionDenied):
+        await service.get_my_attendance_matrix(
+            group_id=7, actor=User(id=20, role="teacher")
+        )
+
+    with pytest.raises(PermissionDenied):
+        await service.get_my_attendance_matrix(
+            group_id=7, actor=User(id=30, role="admin")
+        )
 
 
 @pytest.mark.asyncio
